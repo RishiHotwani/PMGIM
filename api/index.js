@@ -340,10 +340,26 @@ app.delete('/api/rentals/:id', authenticateToken, async (req, res, next) => {
   }
 });
 
-// EXPLORE & REVIEWS
+// EXPLORE PLACES & REVIEWS
 app.get('/api/explore', async (req, res, next) => {
   try {
-    const places = await query('SELECT * FROM explore_places ORDER BY id ASC');
+    const userId = req.headers['x-user-id'] ? parseInt(req.headers['x-user-id'], 10) : null;
+    let sql = 'SELECT * FROM explore_places ORDER BY id ASC';
+    let params = [];
+
+    if (userId) {
+      sql = `
+        SELECT ep.*, 
+               IF(ub.id IS NOT NULL, TRUE, FALSE) AS is_bookmarked 
+        FROM explore_places ep 
+        LEFT JOIN user_bookmarks ub 
+               ON ep.id = ub.place_id AND ub.user_id = ? 
+        ORDER BY ep.id ASC
+      `;
+      params = [userId];
+    }
+
+    const places = await query(sql, params);
     res.json(places);
   } catch (err) {
     next(err);

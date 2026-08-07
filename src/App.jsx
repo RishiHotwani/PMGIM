@@ -23,7 +23,12 @@ function MainAppContent() {
     try {
       const [rRes, eRes, tRes] = await Promise.all([
         fetch('/api/rentals'),
-        fetch('/api/explore'),
+        fetch('/api/explore', {
+          headers: {
+            'x-user-id': currentUser?.id || '',
+            'x-user-name': currentUser?.name || 'User'
+          }
+        }),
         fetch('/api/trips')
       ]);
 
