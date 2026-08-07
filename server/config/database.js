@@ -71,7 +71,7 @@ export async function initDatabase() {
         provider ENUM('EMAIL', 'GOOGLE') NOT NULL DEFAULT 'EMAIL',
         avatar VARCHAR(500) DEFAULT 'US',
         email_verified BOOLEAN DEFAULT FALSE,
-        role ENUM('USER', 'ADMIN', 'SUPER_ADMIN') NOT NULL DEFAULT 'USER',
+        role ENUM('USER', 'VENDOR', 'ADMIN', 'SUPER_ADMIN') NOT NULL DEFAULT 'USER',
         is_active BOOLEAN DEFAULT TRUE,
         failed_login_attempts INT DEFAULT 0,
         lock_until TIMESTAMP NULL DEFAULT NULL,
@@ -88,7 +88,7 @@ export async function initDatabase() {
       "ADD COLUMN google_id VARCHAR(255) NULL",
       "ADD COLUMN provider ENUM('EMAIL', 'GOOGLE') NOT NULL DEFAULT 'EMAIL'",
       "ADD COLUMN email_verified BOOLEAN DEFAULT FALSE",
-      "ADD COLUMN role ENUM('USER', 'ADMIN', 'SUPER_ADMIN') NOT NULL DEFAULT 'USER'",
+      "MODIFY COLUMN role ENUM('USER', 'VENDOR', 'ADMIN', 'SUPER_ADMIN') NOT NULL DEFAULT 'USER'",
       "ADD COLUMN is_active BOOLEAN DEFAULT TRUE",
       "ADD COLUMN failed_login_attempts INT DEFAULT 0",
       "ADD COLUMN lock_until TIMESTAMP NULL DEFAULT NULL",
@@ -99,12 +99,10 @@ export async function initDatabase() {
     for (const colDef of alterColumns) {
       try {
         await pool.query(`ALTER TABLE users ${colDef};`);
-      } catch (e) {
-        // Column already exists, ignore
-      }
+      } catch (e) {}
     }
 
-    // 2. Refresh Tokens Table (Rotation & Revocation)
+    // 2. Refresh Tokens Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -120,7 +118,7 @@ export async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
-    // 3. Auth Tokens Table (Email Verification & Password Reset)
+    // 3. Auth Tokens Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth_tokens (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -148,23 +146,41 @@ export async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
-    // 5. Rentals Table
+    // 5. Rentals Table (Cars, Bikes, Scooters)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS rentals (
         id INT AUTO_INCREMENT PRIMARY KEY,
+        vendor_user_id INT NULL,
         title VARCHAR(255) NOT NULL,
         vendor VARCHAR(255) NOT NULL,
+        category ENUM('Bike', 'Scooter', 'Car') NOT NULL DEFAULT 'Bike',
         price_per_day INT NOT NULL,
-        rating DECIMAL(3,1) DEFAULT 4.5,
-        total_ratings INT DEFAULT 100,
+        rating DECIMAL(3,1) DEFAULT 4.8,
+        total_ratings INT DEFAULT 15,
         distance VARCHAR(50) DEFAULT '1.0 km away',
         fuel VARCHAR(50) DEFAULT 'Petrol',
         transmission VARCHAR(50) DEFAULT 'Automatic',
-        tags VARCHAR(500) DEFAULT 'Women friendly',
+        tags VARCHAR(500) DEFAULT 'Verified Vendor',
         image VARCHAR(500) NOT NULL,
-        is_available BOOLEAN DEFAULT TRUE
+        description TEXT NULL,
+        location VARCHAR(255) DEFAULT 'Sanquelim / Campus',
+        is_available BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB;
     `);
+
+    const rentalCols = [
+      "ADD COLUMN vendor_user_id INT NULL",
+      "ADD COLUMN category ENUM('Bike', 'Scooter', 'Car') NOT NULL DEFAULT 'Bike'",
+      "ADD COLUMN description TEXT NULL",
+      "ADD COLUMN location VARCHAR(255) DEFAULT 'Sanquelim / Campus'",
+      "ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    ];
+    for (const c of rentalCols) {
+      try {
+        await pool.query(`ALTER TABLE rentals ${c};`);
+      } catch (e) {}
+    }
 
     // 6. Explore Places Table
     await pool.query(`
@@ -216,13 +232,13 @@ async function seedInitialData() {
   const [rentalsRows] = await pool.query('SELECT COUNT(*) as count FROM rentals');
   if (rentalsRows[0].count === 0) {
     const rentals = [
-      ['Honda Activa 6G', 'Coastal Rides Sanquelim', 350, 4.8, 132, '1.2 km away', 'Petrol', 'Automatic', 'Women friendly', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', true],
-      ['Royal Enfield Hunter 350', 'Goa Bike Rentals', 750, 4.9, 88, '0.8 km away', 'Petrol', 'Manual', 'Popular choice', 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', true],
-      ['Maruti Suzuki Swift', 'Sanq Cabs & Self Drive', 1800, 4.7, 54, '2.0 km away', 'Petrol', 'Manual', 'AC Sedan', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', true],
-      ['TVS Jupiter 125', 'Campus Wheels', 320, 4.6, 95, '0.5 km away', 'Petrol', 'Automatic', 'Budget friendly', 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', true]
+      [null, 'Honda Activa 6G', 'Coastal Rides Sanquelim', 'Scooter', 350, 4.8, 132, '1.2 km away', 'Petrol', 'Automatic', 'Women friendly', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Reliable 110cc automatic scooter for smooth campus commute.', 'Sanquelim Gate', true],
+      [null, 'Royal Enfield Hunter 350', 'Goa Bike Rentals', 'Bike', 750, 4.9, 88, '0.8 km away', 'Petrol', 'Manual', 'Popular choice', 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', 'Cruiser bike ideal for North Goa beach road trips.', 'Mapusa Road', true],
+      [null, 'Maruti Suzuki Swift', 'Sanq Cabs & Self Drive', 'Car', 1800, 4.7, 54, '2.0 km away', 'Petrol', 'Manual', 'AC Hatchback', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', '5-seater AC hatchback with unlimited kilometers.', 'Thivim Station', true],
+      [null, 'TVS Jupiter 125', 'Campus Wheels', 'Scooter', 320, 4.6, 95, '0.5 km away', 'Petrol', 'Automatic', 'Budget friendly', 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', 'Economical 125cc scooter with spacious under-seat storage.', 'GIM Hostels', true]
     ];
     for (const r of rentals) {
-      await pool.query('INSERT INTO rentals (title, vendor, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', r);
+      await pool.query('INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', r);
     }
   }
 
@@ -251,7 +267,8 @@ async function seedInitialData() {
 
 function seedMemoryData() {
   memoryStore.rentals = [
-    { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true }
+    { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'Campus scooter.', location: 'Sanquelim' },
+    { id: 2, title: 'Maruti Suzuki Swift', vendor: 'Sanq Cabs & Self Drive', category: 'Car', price_per_day: 1800, rating: 4.7, total_ratings: 54, distance: '2.0 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'AC Hatchback', image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'AC car.', location: 'Thivim' }
   ];
   memoryStore.explore_places = [
     { id: 1, name: 'Arambol Beach', category: 'Beaches', rating: 4.7, distance: '38 km · 1 hr 10 min scooter', price: '₹400 per person', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', is_bookmarked: false }

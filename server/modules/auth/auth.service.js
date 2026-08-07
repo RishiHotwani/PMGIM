@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import {
   findUserByEmail,
   findUserByUuid,
+  findUserById,
   findUserByGoogleId,
   createUser,
   updateUserLastLogin,
@@ -35,7 +36,7 @@ export function sanitizeUserDTO(user) {
   return userObj;
 }
 
-export async function registerEmailUser({ name, email, password, batch, section, phone }, clientInfo) {
+export async function registerEmailUser({ name, email, password, batch, section, phone, role }, clientInfo) {
   const existingUser = await findUserByEmail(email);
   if (existingUser) {
     throw new Error('An account with this email address already exists. Please log in.');
@@ -49,6 +50,7 @@ export async function registerEmailUser({ name, email, password, batch, section,
   const passwordHash = await hashPassword(password);
   const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'US';
   const userUuid = uuidv4();
+  const userRole = (role === 'VENDOR' || role === 'ADMIN') ? role : 'USER';
 
   const user = await createUser({
     uuid: userUuid,
@@ -58,7 +60,7 @@ export async function registerEmailUser({ name, email, password, batch, section,
     provider: 'EMAIL',
     avatar: initials,
     emailVerified: false,
-    role: 'USER'
+    role: userRole
   });
 
   const accessToken = generateAccessToken(user);
@@ -193,7 +195,7 @@ export async function rotateRefreshToken(rawRefreshToken, clientInfo) {
 
   // Token Rotation: Revoke old token and issue new token pair
   await revokeRefreshToken(tokenHash);
-  const user = await findUserByUuid(storedToken.user_id);
+  const user = await findUserById(storedToken.user_id);
 
   const newAccessToken = generateAccessToken(user);
   const { rawToken: newRawRefresh, tokenHash: newRefreshHash } = generateRefreshTokenPayload();

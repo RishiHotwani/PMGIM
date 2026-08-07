@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Lock, Phone, ArrowRight, ShieldCheck, Check, X } from 'lucide-react';
+import { User, Mail, Lock, Phone, ArrowRight, ShieldCheck, Check, X, Store, GraduationCap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function AuthGateView({ onAuthSuccess }) {
   const { login, signup, loginWithGoogleToken, forgotPassword } = useAuth();
 
   const [mode, setMode] = useState('signup'); // 'signup' | 'login' | 'forgot'
+  const [userRole, setUserRole] = useState('USER'); // 'USER' (Customer) | 'VENDOR' (Vehicle Vendor)
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     batch: 'PGDM 2026',
     section: 'Sec A',
-    phone: ''
+    phone: '',
+    role: 'USER'
   });
 
   const [error, setError] = useState('');
@@ -21,7 +24,6 @@ export default function AuthGateView({ onAuthSuccess }) {
 
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '460937107777-5lifbfpuskp3bcfifv00f68bs2qib4k6.apps.googleusercontent.com';
 
-  // Initialize Official Google Identity Services (GIS) SDK
   useEffect(() => {
     const renderGoogleButton = () => {
       if (window.google?.accounts?.id) {
@@ -54,7 +56,6 @@ export default function AuthGateView({ onAuthSuccess }) {
     return () => clearTimeout(timer);
   }, [GOOGLE_CLIENT_ID, mode]);
 
-  // Official Google OAuth Token Callback Handler
   const handleGisResponse = async (response) => {
     if (!response || !response.credential) {
       setError('Failed to receive ID token from Google.');
@@ -65,7 +66,6 @@ export default function AuthGateView({ onAuthSuccess }) {
     setError('');
 
     try {
-      // Sends real Google ID Token to backend for server-side verification via OAuth2Client.verifyIdToken
       const data = await loginWithGoogleToken(response.credential);
       if (onAuthSuccess) onAuthSuccess(data.user);
     } catch (err) {
@@ -73,6 +73,11 @@ export default function AuthGateView({ onAuthSuccess }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRoleSelect = (role) => {
+    setUserRole(role);
+    setFormData({ ...formData, role });
   };
 
   const handleSubmit = async (e) => {
@@ -83,7 +88,7 @@ export default function AuthGateView({ onAuthSuccess }) {
 
     try {
       if (mode === 'signup') {
-        const data = await signup(formData);
+        const data = await signup({ ...formData, role: userRole });
         if (onAuthSuccess) onAuthSuccess(data.user);
       } else if (mode === 'login') {
         const data = await login(formData.email, formData.password);
@@ -99,7 +104,6 @@ export default function AuthGateView({ onAuthSuccess }) {
     }
   };
 
-  // Password Complexity Evaluator
   const pass = formData.password;
   const hasMinLength = pass.length >= 12;
   const hasUpper = /[A-Z]/.test(pass);
@@ -112,7 +116,7 @@ export default function AuthGateView({ onAuthSuccess }) {
       <div className="absolute top-0 right-0 -mr-20 -mt-20 w-[600px] h-[600px] rounded-full bg-blue-600/20 blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-[500px] h-[500px] rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10 space-y-6 border border-slate-100 animate-fadeIn">
+      <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10 space-y-5 border border-slate-100 animate-fadeIn">
         {/* Header Logo */}
         <div className="text-center space-y-2">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-2xl mx-auto shadow-lg shadow-blue-500/30">
@@ -122,9 +126,49 @@ export default function AuthGateView({ onAuthSuccess }) {
             PMGIM <span className="text-blue-600">Travel</span>
           </h1>
           <p className="text-xs text-slate-500 font-medium">
-            Goa Institute of Management • Enterprise Authenticated Platform
+            Goa Institute of Management • Student & Vendor Platform
           </p>
         </div>
+
+        {/* Account Role Selector (Customer vs Vendor) */}
+        {mode === 'signup' && (
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Select Account Type:</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleRoleSelect('USER')}
+                className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
+                  userRole === 'USER'
+                    ? 'bg-blue-50 border-blue-500 text-blue-700 font-extrabold shadow-sm'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <GraduationCap className="w-5 h-5 shrink-0" />
+                <div>
+                  <span className="block text-xs">Student</span>
+                  <span className="text-[10px] font-normal opacity-70">Book vehicles & rides</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleRoleSelect('VENDOR')}
+                className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
+                  userRole === 'VENDOR'
+                    ? 'bg-indigo-50 border-indigo-500 text-indigo-700 font-extrabold shadow-sm'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Store className="w-5 h-5 shrink-0" />
+                <div>
+                  <span className="block text-xs">Rental Vendor</span>
+                  <span className="text-[10px] font-normal opacity-70">Post cars, bikes & scooters</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Official Google OAuth Section */}
         {mode !== 'forgot' && (
@@ -143,11 +187,11 @@ export default function AuthGateView({ onAuthSuccess }) {
         )}
 
         {/* Mode Selector */}
-        <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+        <div className="flex bg-slate-100 p-1 rounded-2xl">
           <button
             type="button"
             onClick={() => { setMode('signup'); setError(''); setSuccessMsg(''); }}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+            className={`flex-1 py-2 rounded-xl text-xs font-extrabold transition-all ${
               mode === 'signup' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -156,7 +200,7 @@ export default function AuthGateView({ onAuthSuccess }) {
           <button
             type="button"
             onClick={() => { setMode('login'); setError(''); setSuccessMsg(''); }}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all ${
+            className={`flex-1 py-2 rounded-xl text-xs font-extrabold transition-all ${
               mode === 'login' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -177,42 +221,44 @@ export default function AuthGateView({ onAuthSuccess }) {
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           {mode === 'signup' && (
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Full Name</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                {userRole === 'VENDOR' ? 'Business / Owner Name' : 'Full Name'}
+              </label>
               <div className="relative">
                 <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   required
-                  placeholder="Suraj K"
+                  placeholder={userRole === 'VENDOR' ? 'Coastal Bike Rentals' : 'Suraj K'}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">GIM Email Address</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
               <input
                 type="email"
                 required
-                placeholder="student@gim.ac.in"
+                placeholder={userRole === 'VENDOR' ? 'vendor@rentals.com' : 'student@gim.ac.in'}
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
 
           {mode !== 'forgot' && (
             <div>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-bold text-slate-700">Password</label>
                 {mode === 'login' && (
                   <button
@@ -232,29 +278,25 @@ export default function AuthGateView({ onAuthSuccess }) {
                   placeholder="••••••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              {/* Password Strength Rules for Signup */}
               {mode === 'signup' && pass.length > 0 && (
-                <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-[11px]">
+                <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-[11px]">
                   <p className="font-bold text-slate-700">Password Complexity (OWASP ASVS):</p>
                   <div className="grid grid-cols-2 gap-1 font-medium">
                     <span className={hasMinLength ? 'text-emerald-600 flex items-center gap-1' : 'text-slate-400 flex items-center gap-1'}>
-                      {hasMinLength ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} 12+ Characters
+                      {hasMinLength ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} 12+ Chars
                     </span>
                     <span className={hasUpper ? 'text-emerald-600 flex items-center gap-1' : 'text-slate-400 flex items-center gap-1'}>
-                      {hasUpper ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Uppercase (A-Z)
+                      {hasUpper ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Uppercase
                     </span>
                     <span className={hasLower ? 'text-emerald-600 flex items-center gap-1' : 'text-slate-400 flex items-center gap-1'}>
-                      {hasLower ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Lowercase (a-z)
+                      {hasLower ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Lowercase
                     </span>
                     <span className={hasNum ? 'text-emerald-600 flex items-center gap-1' : 'text-slate-400 flex items-center gap-1'}>
-                      {hasNum ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Number (0-9)
-                    </span>
-                    <span className={hasSpec ? 'text-emerald-600 flex items-center gap-1' : 'text-slate-400 flex items-center gap-1'} style={{ gridColumn: 'span 2' }}>
-                      {hasSpec ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Special Symbol (!@#$%^&*)
+                      {hasNum ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Number
                     </span>
                   </div>
                 </div>
@@ -262,60 +304,19 @@ export default function AuthGateView({ onAuthSuccess }) {
             </div>
           )}
 
-          {mode === 'signup' && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Batch</label>
-                  <input
-                    type="text"
-                    placeholder="PGDM 2026"
-                    value={formData.batch}
-                    onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Section</label>
-                  <input
-                    type="text"
-                    placeholder="Sec B"
-                    value={formData.section}
-                    onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Phone Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-                  <input
-                    type="tel"
-                    placeholder="+91 9876543210"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+            className="w-full py-3.5 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <span>
               {loading
                 ? 'Authenticating...'
                 : mode === 'signup'
-                ? 'Create Secure Account'
+                ? userRole === 'VENDOR' ? 'Register as Rental Vendor' : 'Create Student Account'
                 : mode === 'login'
                 ? 'Log In'
-                : 'Send Password Reset Link'}
+                : 'Send Reset Link'}
             </span>
             <ArrowRight className="w-4 h-4" />
           </button>
@@ -323,7 +324,7 @@ export default function AuthGateView({ onAuthSuccess }) {
 
         <div className="pt-2 text-center text-xs text-slate-400 border-t border-slate-100 flex items-center justify-center gap-1.5">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <span>OWASP ASVS & bcrypt (cost 12) Protected</span>
+          <span>OWASP ASVS & Multi-Role RBAC Protected</span>
         </div>
       </div>
     </div>

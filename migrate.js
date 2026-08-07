@@ -18,33 +18,44 @@ async function migrate() {
       database: DB_NAME
     });
 
-    console.log(`Migrating MySQL table users on ${DB_HOST}:${DB_PORT} / ${DB_NAME}...`);
+    console.log(`Migrating MySQL database tables on ${DB_HOST}:${DB_PORT} / ${DB_NAME}...`);
 
-    const cols = [
-      "ADD COLUMN uuid VARCHAR(36) NULL",
-      "ADD COLUMN google_id VARCHAR(255) NULL",
-      "ADD COLUMN provider ENUM('EMAIL', 'GOOGLE') NOT NULL DEFAULT 'EMAIL'",
-      "ADD COLUMN avatar VARCHAR(500) DEFAULT 'US'",
-      "ADD COLUMN email_verified BOOLEAN DEFAULT FALSE",
-      "ADD COLUMN role ENUM('USER', 'ADMIN', 'SUPER_ADMIN') NOT NULL DEFAULT 'USER'",
-      "ADD COLUMN is_active BOOLEAN DEFAULT TRUE",
-      "ADD COLUMN failed_login_attempts INT DEFAULT 0",
-      "ADD COLUMN lock_until TIMESTAMP NULL DEFAULT NULL",
-      "ADD COLUMN last_login TIMESTAMP NULL DEFAULT NULL",
-      "ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"
+    // 1. Update users role ENUM
+    try {
+      await conn.query(`ALTER TABLE users MODIFY COLUMN role ENUM('USER', 'VENDOR', 'ADMIN', 'SUPER_ADMIN') NOT NULL DEFAULT 'USER';`);
+      console.log('Successfully updated users role ENUM to include VENDOR');
+    } catch (err) {
+      console.log('Role ENUM status:', err.message);
+    }
+
+    // 2. Update rentals table columns
+    const rentalCols = [
+      "ADD COLUMN vendor_user_id INT NULL",
+      "ADD COLUMN category ENUM('Bike', 'Scooter', 'Car') NOT NULL DEFAULT 'Bike'",
+      "ADD COLUMN description TEXT NULL",
+      "ADD COLUMN location VARCHAR(255) DEFAULT 'Sanquelim / Campus'",
+      "ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
     ];
 
-    for (const c of cols) {
+    for (const c of rentalCols) {
       try {
-        await conn.query(`ALTER TABLE users ${c};`);
-        console.log(`Successfully executed: ALTER TABLE users ${c}`);
+        await conn.query(`ALTER TABLE rentals ${c};`);
+        console.log(`Successfully executed: ALTER TABLE rentals ${c}`);
       } catch (err) {
-        console.log(`Column status (${c.split(' ')[2]}): ${err.message}`);
+        console.log(`Rentals column status (${c.split(' ')[2]}): ${err.message}`);
       }
     }
 
+    // Classify existing seed rentals
+    try {
+      await conn.query("UPDATE rentals SET category = 'Scooter' WHERE title LIKE '%Activa%' OR title LIKE '%Jupiter%';");
+      await conn.query("UPDATE rentals SET category = 'Bike' WHERE title LIKE '%Enfield%' OR title LIKE '%Bike%';");
+      await conn.query("UPDATE rentals SET category = 'Car' WHERE title LIKE '%Swift%' OR title LIKE '%Car%';");
+      console.log('Updated rental categories for existing vehicles');
+    } catch (err) {}
+
     await conn.end();
-    console.log('✅ Migration complete!');
+    console.log('✅ Database migration complete!');
   } catch (err) {
     console.error('Migration error:', err);
   }

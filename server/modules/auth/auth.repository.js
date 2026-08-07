@@ -26,6 +26,19 @@ export async function findUserByUuid(uuid) {
   return memoryStore.users.find(u => u.uuid === uuid && !u.deleted_at) || null;
 }
 
+export async function findUserById(id) {
+  if (!isInMemoryFallback) {
+    try {
+      const rows = await query('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL', [id]);
+      return rows[0] || null;
+    } catch (e) {
+      const rows = await query('SELECT * FROM users WHERE id = ?', [id]);
+      return rows[0] || null;
+    }
+  }
+  return memoryStore.users.find(u => u.id === parseInt(id, 10) && !u.deleted_at) || null;
+}
+
 export async function findUserByGoogleId(googleId) {
   if (!isInMemoryFallback) {
     try {

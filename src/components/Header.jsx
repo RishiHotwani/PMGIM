@@ -1,10 +1,13 @@
 import React from 'react';
-import { Bell, LogOut, Compass, Bike, Users, Home, User } from 'lucide-react';
+import { Bell, LogOut, Compass, Bike, Users, Home, User, Store } from 'lucide-react';
 
 export default function Header({ currentUser, onLogout, activeTab, setActiveTab }) {
+  const isVendor = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN';
+
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'rentals', label: 'Rentals', icon: Bike },
+    ...(isVendor ? [{ id: 'vendor_portal', label: 'Vendor Portal', icon: Store }] : []),
     { id: 'explore', label: 'Explore Goa', icon: Compass },
     { id: 'travel', label: 'Travel Board', icon: Users },
     { id: 'profile', label: 'Profile', icon: User },
@@ -37,7 +40,7 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
           <div className="hidden xl:flex items-center gap-2 ml-4 pl-4 border-l border-slate-200">
             <span className="text-xs text-slate-400 font-medium">Welcome,</span>
             <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
-              {firstName} 👋
+              {firstName} 👋 {isVendor && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-extrabold rounded-md">Vendor</span>}
             </span>
           </div>
         </div>
@@ -76,7 +79,7 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
           <button
             onClick={() => setActiveTab('profile')}
             className="flex items-center gap-2 p-1 pr-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 transition-colors"
-            title={`${currentUser?.name} (${currentUser?.batch})`}
+            title={`${currentUser?.name} (${currentUser?.role})`}
           >
             <div className="w-8 h-8 rounded-lg bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
               {currentUser?.avatar || 'US'}

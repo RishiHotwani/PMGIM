@@ -7,6 +7,7 @@ import ExploreView from './views/ExploreView';
 import TravelView from './views/TravelView';
 import ProfileView from './views/ProfileView';
 import AuthGateView from './views/AuthGateView';
+import VendorPortalView from './views/VendorPortalView';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 function MainAppContent() {
@@ -90,7 +91,6 @@ function MainAppContent() {
     await logout();
   };
 
-  // Show loading indicator during silent session restoration
   if (loading) {
     return (
       <div className="w-full min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
@@ -100,7 +100,6 @@ function MainAppContent() {
     );
   }
 
-  // Enforce Auth Gate
   if (!currentUser) {
     return <AuthGateView onAuthSuccess={(user) => setCurrentUser(user)} />;
   }
@@ -131,6 +130,12 @@ function MainAppContent() {
             <RentalsView
               rentals={rentals}
               onLogAction={handleLogAction}
+              currentUser={currentUser}
+            />
+          )}
+
+          {activeTab === 'vendor_portal' && (
+            <VendorPortalView
               currentUser={currentUser}
             />
           )}
