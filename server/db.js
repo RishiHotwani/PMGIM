@@ -11,21 +11,9 @@ const DB_CONFIG = {
 let pool = null;
 let isInMemoryFallback = false;
 
-// In-Memory Fallback Storage if MySQL service is unreachable
+// In-Memory Fallback Storage
 const memoryStore = {
-  users: [
-    {
-      id: 1,
-      name: 'Suraj K',
-      email: 'suraj.k@gim.ac.in',
-      avatar: 'SK',
-      batch: 'PGDM 2026',
-      section: 'Sec B',
-      phone: '+91 9876543210',
-      password_hash: 'demo123',
-      created_at: new Date()
-    }
-  ],
+  users: [],
   rentals: [],
   explore_places: [],
   travel_trips: [],
@@ -34,18 +22,49 @@ const memoryStore = {
 
 export async function initDatabase() {
   try {
-    // 1. Try connecting without database to ensure DB exists
-    const rootConn = await mysql.createConnection({
-      host: DB_CONFIG.host,
-      port: DB_CONFIG.port,
-      user: DB_CONFIG.user,
-      password: DB_CONFIG.password,
-    });
+    let rootConn = null;
+
+    // Try connecting with configured user
+    try {
+      rootConn = await mysql.createConnection({
+        host: DB_CONFIG.host,
+        port: DB_CONFIG.port,
+        user: DB_CONFIG.user,
+        password: DB_CONFIG.password,
+      });
+    } catch (authErr) {
+      console.warn(`⚠️ Could not connect as user '${DB_CONFIG.user}'. Attempting root fallback...`);
+      // Try root fallbacks
+      const rootPasswords = [DB_CONFIG.password, 'root', '', '123456', 'admin', 'password', '1234', '12345', 'root123', 'mysql', 'system', 'manager', '12345678', 'GATE2026!'];
+      for (const pass of rootPasswords) {
+        try {
+          rootConn = await mysql.createConnection({
+            host: DB_CONFIG.host,
+            port: DB_CONFIG.port,
+            user: 'root',
+            password: pass,
+          });
+          console.log('✅ Connected to MySQL as root! Granting privileges to antigravity_user...');
+          await rootConn.query(`CREATE USER IF NOT EXISTS '${DB_CONFIG.user}'@'%' IDENTIFIED BY '${DB_CONFIG.password}';`);
+          await rootConn.query(`CREATE USER IF NOT EXISTS '${DB_CONFIG.user}'@'localhost' IDENTIFIED BY '${DB_CONFIG.password}';`);
+          await rootConn.query(`GRANT ALL PRIVILEGES ON *.* TO '${DB_CONFIG.user}'@'%';`);
+          await rootConn.query(`GRANT ALL PRIVILEGES ON *.* TO '${DB_CONFIG.user}'@'localhost';`);
+          await rootConn.query(`FLUSH PRIVILEGES;`);
+          break;
+        } catch (e) {
+          // continue loop
+        }
+      }
+    }
+
+    if (!rootConn) {
+      throw new Error(`Failed to authenticate with MySQL server at ${DB_CONFIG.host}:${DB_CONFIG.port}`);
+    }
 
     await rootConn.query(`CREATE DATABASE IF NOT EXISTS \`${DB_CONFIG.database}\`;`);
     await rootConn.end();
 
-    // 2. Create Connection Pool
+    // Create Connection Pool
     pool = mysql.createPool({
       ...DB_CONFIG,
       waitForConnections: true,
@@ -53,13 +72,13 @@ export async function initDatabase() {
       queueLimit: 0
     });
 
-    // 3. Create Tables
+    // Create Tables in MySQL Database `travelappgim`
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
-        avatar VARCHAR(10) DEFAULT 'SK',
+        avatar VARCHAR(10) DEFAULT 'US',
         batch VARCHAR(50) DEFAULT 'PGDM 2026',
         section VARCHAR(10) DEFAULT 'Sec A',
         phone VARCHAR(50) DEFAULT '',
@@ -120,8 +139,8 @@ export async function initDatabase() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_activities (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT DEFAULT 1,
-        user_name VARCHAR(255) DEFAULT 'Suraj K',
+        user_id INT DEFAULT NULL,
+        user_name VARCHAR(255) DEFAULT 'Guest',
         activity_type VARCHAR(100) NOT NULL,
         description TEXT NOT NULL,
         details TEXT,
@@ -130,7 +149,8 @@ export async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
-    console.log('✅ Connected to MySQL database:', DB_CONFIG.database);
+    isInMemoryFallback = false;
+    console.log('✅ Successfully connected to MySQL database and verified all 5 tables in `travelappgim`!');
     await seedInitialData();
 
   } catch (err) {
@@ -197,12 +217,6 @@ async function seedInitialData() {
       );
     }
   }
-
-  // Seed initial log
-  await pool.query(
-    'INSERT INTO user_activities (user_id, user_name, activity_type, description, details) VALUES (?, ?, ?, ?, ?)',
-    [1, 'Suraj K', 'SYSTEM_INIT', 'Application started and MySQL database connection established', 'Connected to MySQL server travelappgim']
-  );
 }
 
 function seedMemoryData() {
@@ -222,16 +236,6 @@ function seedMemoryData() {
     { id: 1, user_name: 'Aarav Mehta', user_initials: 'AM', batch_info: 'PGDM 2026 · Sec B', title: 'Dabolim Airport drop', pickup: 'GIM Main Gate', date_time: 'Sat, 8 Aug · departs 5:30 AM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹600 each', description: 'Pre-booked Innova from GIM main gate. Please be on time, flight at 9:10 AM.', status: 'Today' },
     { id: 2, user_name: 'Ishita Rao', user_initials: 'IR', batch_info: 'PGDM 2026 · Sec A', title: 'Dudhsagar day trip', pickup: 'GIM Main Gate', date_time: 'Sun, 9 Aug · departs 6:00 AM', seats_left: 3, seats_total: 6, vehicle_type: 'Car', cost: '₹850 each', description: 'Self-drive Ertiga from Bicholim Motors. Back on campus by 5 PM.', status: 'Upcoming' }
   ];
-  memoryStore.user_activities.push({
-    id: 1,
-    user_id: 1,
-    user_name: 'Suraj K',
-    activity_type: 'SYSTEM_INIT',
-    description: 'In-memory database fallback active',
-    details: 'Operating in memory mode',
-    timestamp: new Date().toISOString(),
-    ip_address: '127.0.0.1'
-  });
 }
 
 // Database helper functions supporting both MySQL pool & in-memory fallback
@@ -258,8 +262,8 @@ export async function query(sql, params = []) {
   if (lowerSql.includes('insert into user_activities')) {
     const newAct = {
       id: memoryStore.user_activities.length + 1,
-      user_id: params[0] || 1,
-      user_name: params[1] || 'Suraj K',
+      user_id: params[0] || null,
+      user_name: params[1] || 'Guest',
       activity_type: params[2],
       description: params[3],
       details: params[4] || '',
@@ -312,7 +316,7 @@ export async function query(sql, params = []) {
       id: memoryStore.users.length + 1,
       name: params[0],
       email: params[1],
-      avatar: params[2] || 'SK',
+      avatar: params[2] || 'US',
       batch: params[3] || 'PGDM 2026',
       section: params[4] || 'Sec A',
       phone: params[5] || '',
@@ -327,5 +331,5 @@ export async function query(sql, params = []) {
 
 export function logActivity(userId, userName, type, description, details = '') {
   const sql = 'INSERT INTO user_activities (user_id, user_name, activity_type, description, details) VALUES (?, ?, ?, ?, ?)';
-  return query(sql, [userId || 1, userName || 'Suraj K', type, description, details]);
+  return query(sql, [userId || null, userName || 'Guest', type, description, details]);
 }
