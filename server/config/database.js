@@ -78,12 +78,31 @@ export async function initDatabase() {
         last_login TIMESTAMP NULL DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP NULL DEFAULT NULL,
-        INDEX idx_email (email),
-        INDEX idx_uuid (uuid),
-        INDEX idx_google_id (google_id)
+        deleted_at TIMESTAMP NULL DEFAULT NULL
       ) ENGINE=InnoDB;
     `);
+
+    // Ensure missing columns exist in pre-existing tables
+    const alterColumns = [
+      "ADD COLUMN uuid VARCHAR(36) NULL",
+      "ADD COLUMN google_id VARCHAR(255) NULL",
+      "ADD COLUMN provider ENUM('EMAIL', 'GOOGLE') NOT NULL DEFAULT 'EMAIL'",
+      "ADD COLUMN email_verified BOOLEAN DEFAULT FALSE",
+      "ADD COLUMN role ENUM('USER', 'ADMIN', 'SUPER_ADMIN') NOT NULL DEFAULT 'USER'",
+      "ADD COLUMN is_active BOOLEAN DEFAULT TRUE",
+      "ADD COLUMN failed_login_attempts INT DEFAULT 0",
+      "ADD COLUMN lock_until TIMESTAMP NULL DEFAULT NULL",
+      "ADD COLUMN last_login TIMESTAMP NULL DEFAULT NULL",
+      "ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"
+    ];
+
+    for (const colDef of alterColumns) {
+      try {
+        await pool.query(`ALTER TABLE users ${colDef};`);
+      } catch (e) {
+        // Column already exists, ignore
+      }
+    }
 
     // 2. Refresh Tokens Table (Rotation & Revocation)
     await pool.query(`

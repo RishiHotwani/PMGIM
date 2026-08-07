@@ -7,8 +7,8 @@ export default function AuthGateView({ onAuthSuccess }) {
 
   const [mode, setMode] = useState('signup'); // 'signup' | 'login' | 'forgot'
   const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [customGoogleName, setCustomGoogleName] = useState('');
+  const [customGoogleEmail, setCustomGoogleEmail] = useState('rishiii787@gmail.com');
+  const [customGoogleName, setCustomGoogleName] = useState('Rishi Hotwani');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -26,14 +26,7 @@ export default function AuthGateView({ onAuthSuccess }) {
 
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
-  // Quick 1-Click Accounts
-  const googleAccountsList = [
-    { name: 'Rishi Hotwani', email: 'rishiii787@gmail.com', avatar: 'RH', batch: 'PGDM 2026', section: 'Sec A' },
-    { name: 'Suraj K', email: 'suraj.k@gim.ac.in', avatar: 'SK', batch: 'PGDM 2026', section: 'Sec B' },
-    { name: 'Aarav Mehta', email: 'aarav.mehta@gim.ac.in', avatar: 'AM', batch: 'PGDM 2026', section: 'Sec B' }
-  ];
-
-  // Initialize Google Identity Services (GIS) ONLY if a real Client ID is set in .env
+  // Initialize Google Identity Services (GIS) ONLY if a valid Client ID is configured
   useEffect(() => {
     if (GOOGLE_CLIENT_ID && window.google?.accounts?.id) {
       try {
@@ -115,8 +108,7 @@ export default function AuthGateView({ onAuthSuccess }) {
     e.preventDefault();
     if (!customGoogleEmail.trim()) return;
     const name = customGoogleName.trim() || customGoogleEmail.split('@')[0].replace('.', ' ');
-    const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
-    processGoogleLogin(customGoogleEmail.trim(), formattedName);
+    processGoogleLogin(customGoogleEmail.trim(), name);
   };
 
   const handleSubmit = async (e) => {
@@ -406,60 +398,63 @@ export default function AuthGateView({ onAuthSuccess }) {
             </div>
 
             <p className="text-xs text-slate-500">
-              Select your Google Account to authorize 1-click access to <span className="font-bold text-slate-700">PMGIM Travel</span>:
+              Sign in with your Google Account for 1-click access to <span className="font-bold text-slate-700">PMGIM Travel</span>:
             </p>
 
-            {/* Quick 1-Click Account Buttons */}
-            <div className="space-y-2">
-              {googleAccountsList.map((acc) => (
-                <button
-                  key={acc.email}
-                  onClick={() => processGoogleLogin(acc.email, acc.name)}
-                  disabled={loading}
-                  className="w-full p-3 bg-slate-50 hover:bg-blue-50/70 border border-slate-200 hover:border-blue-300 rounded-2xl text-left flex items-center justify-between transition-all group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
-                      {acc.avatar}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-xs group-hover:text-blue-600 transition-colors">{acc.name}</h4>
-                      <p className="text-[11px] text-slate-500">{acc.email}</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
-                </button>
-              ))}
-            </div>
+            {/* Direct 1-Click Button for Rishi Hotwani */}
+            <button
+              onClick={() => processGoogleLogin('rishiii787@gmail.com', 'Rishi Hotwani')}
+              disabled={loading}
+              className="w-full p-3.5 bg-blue-50 hover:bg-blue-100/80 border border-blue-200 rounded-2xl text-left flex items-center justify-between transition-all group shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+                  RH
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs group-hover:text-blue-600 transition-colors">Rishi Hotwani</h4>
+                  <p className="text-[11px] text-slate-500">rishiii787@gmail.com</p>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-blue-600" />
+            </button>
 
             <div className="relative flex items-center justify-center my-3">
               <div className="border-t border-slate-200 w-full" />
               <span className="bg-white px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 absolute">
-                or enter your Google Email
+                or sign in with another Gmail
               </span>
             </div>
 
             {/* Custom Google Email Input */}
             <form onSubmit={handleCustomGoogleSubmit} className="space-y-2.5">
-              <input
-                type="email"
-                required
-                placeholder="rishiii787@gmail.com"
-                value={customGoogleEmail}
-                onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                type="text"
-                placeholder="Your Full Name (Optional)"
-                value={customGoogleName}
-                onChange={(e) => setCustomGoogleName(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Google Email Address</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="rishiii787@gmail.com"
+                  value={customGoogleEmail}
+                  onChange={(e) => setCustomGoogleEmail(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  placeholder="Rishi Hotwani"
+                  value={customGoogleName}
+                  onChange={(e) => setCustomGoogleName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-md hover:bg-blue-700 transition-colors"
+                className="w-full py-3 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-md hover:bg-blue-700 transition-colors"
               >
                 {loading ? 'Authorizing...' : 'Authorize & Sign In with Google'}
               </button>
