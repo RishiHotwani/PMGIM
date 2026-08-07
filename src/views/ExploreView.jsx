@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapPin, Star, Heart, Compass, Info } from 'lucide-react';
 import SpotDetailModal from '../components/SpotDetailModal';
 
@@ -8,6 +8,30 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
   const [userBookmarks, setUserBookmarks] = useState({});
 
   const categories = ['All', 'Beaches', 'Waterfalls', 'Food', 'Forts', 'Nightlife'];
+
+  const fetchUserBookmarks = async () => {
+    if (!currentUser?.id) return;
+    try {
+      const res = await fetch('/api/bookmarks', {
+        headers: {
+          'x-user-id': currentUser.id,
+          'x-user-name': currentUser.name || 'User'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const map = {};
+        data.forEach(b => { map[b.id] = true; });
+        setUserBookmarks(map);
+      }
+    } catch (err) {
+      console.error('Fetch bookmarks error:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserBookmarks();
+  }, [currentUser]);
 
   const filteredPlaces = places.filter((item) => {
     if (selectedCategory === 'All') return true;
@@ -20,15 +44,21 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
   };
 
   const handleToggleBookmark = async (spotId) => {
+    if (!currentUser?.id) {
+      alert('Please log in to bookmark places.');
+      return;
+    }
+
     try {
       setUserBookmarks(prev => ({ ...prev, [spotId]: !prev[spotId] }));
       await fetch(`/api/bookmarks/${spotId}/toggle`, {
         method: 'POST',
         headers: {
-          'x-user-id': currentUser?.id || '',
-          'x-user-name': currentUser?.name || 'User'
+          'x-user-id': currentUser.id,
+          'x-user-name': currentUser.name || 'User'
         }
       });
+      fetchUserBookmarks();
     } catch (err) {
       console.error(err);
     }
@@ -84,84 +114,88 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
 
       {/* Spots Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredPlaces.map((item) => (
-          <div
-            key={item.id}
-            className="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between group"
-          >
-            <div>
-              <div className="relative h-52 w-full bg-slate-100 overflow-hidden">
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                
-                <span className="absolute top-3 left-3 px-3 py-1 rounded-full text-[11px] font-extrabold bg-blue-600 text-white shadow-sm">
-                  {item.category}
-                </span>
+        {filteredPlaces.map((item) => {
+          const isBookmarked = !!userBookmarks[item.id];
+          return (
+            <div
+              key={item.id}
+              className="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between group"
+            >
+              <div>
+                <div className="relative h-52 w-full bg-slate-100 overflow-hidden">
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  
+                  <span className="absolute top-3 left-3 px-3 py-1 rounded-full text-[11px] font-extrabold bg-blue-600 text-white shadow-sm">
+                    {item.category}
+                  </span>
 
-                <div className="absolute top-3 right-3 flex items-center gap-2">
-                  {/* Google Maps Quick Link Icon */}
-                  <a
-                    href={getMapsUrl(item)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="p-2 bg-white/90 backdrop-blur-md rounded-full text-blue-600 hover:bg-white shadow-md transition-all hover:scale-110"
-                    title="Open in Google Maps"
-                  >
-                    <MapPin className="w-4 h-4 fill-blue-600/10" />
-                  </a>
+                  <div className="absolute top-3 right-3 flex items-center gap-2">
+                    {/* Google Maps Quick Link Icon */}
+                    <a
+                      href={getMapsUrl(item)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-2 bg-white/90 backdrop-blur-md rounded-full text-blue-600 hover:bg-white shadow-md transition-all hover:scale-110"
+                      title="Open in Google Maps"
+                    >
+                      <MapPin className="w-4 h-4 fill-blue-600/10" />
+                    </a>
 
-                  {/* Bookmark Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleBookmark(item.id);
-                    }}
-                    className={`p-2 rounded-full backdrop-blur-md transition-all ${
-                      userBookmarks[item.id]
-                        ? 'bg-rose-500 text-white shadow-md'
-                        : 'bg-white/90 text-slate-600 hover:bg-white'
-                    }`}
-                  >
-                    <Heart className={`w-4 h-4 ${userBookmarks[item.id] ? 'fill-white' : ''}`} />
-                  </button>
+                    {/* Bookmark Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleBookmark(item.id);
+                      }}
+                      className={`p-2 rounded-full backdrop-blur-md transition-all ${
+                        isBookmarked
+                          ? 'bg-rose-500 text-white shadow-md'
+                          : 'bg-white/90 text-slate-600 hover:bg-white'
+                      }`}
+                      title={isBookmarked ? 'Remove Bookmark' : 'Save Bookmark'}
+                    >
+                      <Heart className={`w-4 h-4 ${isBookmarked ? 'fill-white text-white' : ''}`} />
+                    </button>
+                  </div>
+
+                  <div className="absolute bottom-3 left-3 px-3 py-1 rounded-full text-[11px] font-extrabold bg-slate-950/70 backdrop-blur-md text-white flex items-center gap-1">
+                    <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                    <span>{item.rating || 4.5}</span>
+                  </div>
                 </div>
 
-                <div className="absolute bottom-3 left-3 px-3 py-1 rounded-full text-[11px] font-extrabold bg-slate-950/70 backdrop-blur-md text-white flex items-center gap-1">
-                  <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                  <span>{item.rating || 4.5}</span>
+                <div className="p-5 space-y-2">
+                  <h3 className="font-black text-slate-900 text-base group-hover:text-blue-600 transition-colors">
+                    {item.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium line-clamp-2">
+                    {item.description || item.distance}
+                  </p>
+
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-600 pt-2 border-t border-slate-100">
+                    <span className="text-slate-400">{item.distance}</span>
+                    <span className="text-blue-600 font-extrabold">{item.price}</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="p-5 space-y-2">
-                <h3 className="font-black text-slate-900 text-base group-hover:text-blue-600 transition-colors">
-                  {item.name}
-                </h3>
-                <p className="text-xs text-slate-500 font-medium line-clamp-2">
-                  {item.description || item.distance}
-                </p>
-
-                <div className="flex items-center justify-between text-xs font-bold text-slate-600 pt-2 border-t border-slate-100">
-                  <span className="text-slate-400">{item.distance}</span>
-                  <span className="text-blue-600 font-extrabold">{item.price}</span>
-                </div>
+              <div className="p-5 pt-0 flex items-center gap-2">
+                <button
+                  onClick={() => handleOpenSpot(item)}
+                  className="w-full py-3 bg-slate-900 hover:bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <Info className="w-4 h-4" />
+                  <span>View Details, Ratings & Reviews</span>
+                </button>
               </div>
             </div>
-
-            <div className="p-5 pt-0 flex items-center gap-2">
-              <button
-                onClick={() => handleOpenSpot(item)}
-                className="w-full py-3 bg-slate-900 hover:bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
-              >
-                <Info className="w-4 h-4" />
-                <span>View Details, Ratings & Reviews</span>
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Interactive Reusable Spot Detail Modal */}

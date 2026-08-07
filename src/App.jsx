@@ -144,7 +144,7 @@ function MainAppContent() {
             <ExploreView
               places={explorePlaces}
               onLogAction={handleLogAction}
-              onToggleBookmark={handleToggleBookmark}
+              currentUser={currentUser}
             />
           )}
 
