@@ -53,7 +53,6 @@ app.use('/auth', authRouter);
 app.use('/users', authRouter);
 
 // ----------------- RENTALS ROUTES -----------------
-// GET all available rentals (for Customers)
 app.get('/api/rentals', async (req, res, next) => {
   try {
     const { category } = req.query;
@@ -72,7 +71,6 @@ app.get('/api/rentals', async (req, res, next) => {
   }
 });
 
-// GET vendor's own uploaded fleet
 app.get('/api/rentals/vendor', authenticateToken, async (req, res, next) => {
   try {
     const vendorUserId = req.user.id;
@@ -83,7 +81,6 @@ app.get('/api/rentals/vendor', authenticateToken, async (req, res, next) => {
   }
 });
 
-// POST new rental vehicle (Vendor action)
 app.post('/api/rentals', authenticateToken, async (req, res, next) => {
   try {
     if (req.user.role !== 'VENDOR' && req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
@@ -137,7 +134,6 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
   }
 });
 
-// PATCH toggle vehicle availability (Vendor action)
 app.patch('/api/rentals/:id/toggle', authenticateToken, async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -156,7 +152,6 @@ app.patch('/api/rentals/:id/toggle', authenticateToken, async (req, res, next) =
   }
 });
 
-// DELETE rental vehicle (Vendor action)
 app.delete('/api/rentals/:id', authenticateToken, async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -179,7 +174,6 @@ app.delete('/api/rentals/:id', authenticateToken, async (req, res, next) => {
   }
 });
 
-// POST book rental vehicle (Customer action)
 app.post('/api/rentals/:id/book', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -205,11 +199,66 @@ app.post('/api/rentals/:id/book', async (req, res, next) => {
   }
 });
 
-// ----------------- EXPLORE PLACES ROUTES -----------------
+// ----------------- EXPLORE PLACES & REVIEWS ROUTES -----------------
 app.get('/api/explore', async (req, res, next) => {
   try {
     const places = await query('SELECT * FROM explore_places ORDER BY id ASC');
     res.json(places);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET reviews & comments for a place
+app.get('/api/explore/:id/reviews', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const reviews = await query('SELECT * FROM place_reviews WHERE place_id = ? ORDER BY id DESC', [id]);
+    res.json(reviews);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST a new rating & comment for a place
+app.post('/api/explore/:id/reviews', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { rating, comment, userName, userId } = req.body;
+
+    if (!rating || !comment) {
+      return res.status(400).json({ success: false, message: 'Rating (1-5) and comment text are required.' });
+    }
+
+    const name = userName || req.headers['x-user-name'] || 'Anonymous Student';
+    const avatar = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'US';
+    const numRating = parseInt(rating, 10);
+
+    const result = await query(
+      'INSERT INTO place_reviews (place_id, user_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, userId || null, name, avatar, numRating, comment]
+    );
+
+    // Recalculate average rating for the place
+    const allReviews = await query('SELECT rating FROM place_reviews WHERE place_id = ?', [id]);
+    if (allReviews.length > 0) {
+      const avg = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
+      await query('UPDATE explore_places SET rating = ? WHERE id = ?', [avg.toFixed(1), id]);
+    }
+
+    await logAuditActivity(
+      userId || req.headers['x-user-id'] || null,
+      name,
+      'POST_PLACE_REVIEW',
+      `Posted ${numRating}-star review for place ID #${id}`,
+      { placeId: id, rating: numRating, comment }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Review and rating submitted successfully!',
+      id: result.insertId
+    });
   } catch (err) {
     next(err);
   }

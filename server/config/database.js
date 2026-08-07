@@ -10,6 +10,7 @@ export const memoryStore = {
   auth_tokens: [],
   rentals: [],
   explore_places: [],
+  place_reviews: [],
   travel_trips: [],
   user_activities: []
 };
@@ -146,7 +147,7 @@ export async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
-    // 5. Rentals Table (Cars, Bikes, Scooters)
+    // 5. Rentals Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS rentals (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -169,19 +170,6 @@ export async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
-    const rentalCols = [
-      "ADD COLUMN vendor_user_id INT NULL",
-      "ADD COLUMN category ENUM('Bike', 'Scooter', 'Car') NOT NULL DEFAULT 'Bike'",
-      "ADD COLUMN description TEXT NULL",
-      "ADD COLUMN location VARCHAR(255) DEFAULT 'Sanquelim / Campus'",
-      "ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-    ];
-    for (const c of rentalCols) {
-      try {
-        await pool.query(`ALTER TABLE rentals ${c};`);
-      } catch (e) {}
-    }
-
     // 6. Explore Places Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS explore_places (
@@ -192,11 +180,31 @@ export async function initDatabase() {
         distance VARCHAR(100) DEFAULT '',
         price VARCHAR(100) DEFAULT '',
         image VARCHAR(500) NOT NULL,
-        is_bookmarked BOOLEAN DEFAULT FALSE
+        is_bookmarked BOOLEAN DEFAULT FALSE,
+        description TEXT NULL,
+        maps_url VARCHAR(500) NULL,
+        best_time VARCHAR(255) DEFAULT '5:00 PM – 7:00 PM (Sunset)',
+        est_cost VARCHAR(100) DEFAULT '₹400 / person',
+        pro_tips TEXT NULL
       ) ENGINE=InnoDB;
     `);
 
-    // 7. Travel Trips Table
+    // 7. Place Reviews & Ratings Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS place_reviews (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        place_id INT NOT NULL,
+        user_id INT NULL,
+        user_name VARCHAR(255) NOT NULL,
+        user_avatar VARCHAR(10) DEFAULT 'US',
+        rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+        comment TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_place_id (place_id)
+      ) ENGINE=InnoDB;
+    `);
+
+    // 8. Travel Trips Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS travel_trips (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -245,37 +253,27 @@ async function seedInitialData() {
   const [exploreRows] = await pool.query('SELECT COUNT(*) as count FROM explore_places');
   if (exploreRows[0].count === 0) {
     const places = [
-      ['Arambol Beach', 'Beaches', 4.7, '38 km · 1 hr 10 min scooter', '₹400 per person', 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', false],
-      ["Britto's, Baga", 'Food', 4.4, '33 km · 1 hr scooter', '₹700 per person', 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80', false],
-      ['Dudhsagar Falls', 'Waterfalls', 4.9, '72 km · 2 hr 15 min', '₹1200 per person', 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=800&q=80', true]
+      ['Arambol Beach', 'Beaches', 4.7, '38 km · 1 hr 10 min scooter', '₹400 per person', 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', false, 'Famous for its bohemian vibes, freshwater lake, cliffside cafes, and iconic sunset drum circles.', 'https://www.google.com/maps/search/?api=1&query=Arambol+Beach+Goa', '5:00 PM – 7:30 PM (Sunset)', '₹300 / person', 'Visit around 5 PM to see the famous beach drum circle.'],
+      ["Britto's, Baga", 'Food', 4.4, '33 km · 1 hr scooter', '₹700 per person', 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80', false, 'Legendary beachside restaurant in Baga known for fresh seafood and Goan fish curry.', 'https://www.google.com/maps/search/?api=1&query=Brittos+Baga+Goa', '7:00 PM – 11:00 PM (Dinner)', '₹700 / person', 'Try the butter garlic prawns and pork vindaloo.'],
+      ['Dudhsagar Falls', 'Waterfalls', 4.9, '72 km · 2 hr 15 min', '₹1200 per person', 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=800&q=80', true, 'Four-tiered waterfall offering breathtaking forest views and jeep treks.', 'https://www.google.com/maps/search/?api=1&query=Dudhsagar+Waterfalls+Goa', '9:00 AM – 2:00 PM (Day Trip)', '₹1200 / person', 'Life jackets mandatory. Start early from campus at 6 AM.']
     ];
     for (const p of places) {
-      await pool.query('INSERT INTO explore_places (name, category, rating, distance, price, image, is_bookmarked) VALUES (?, ?, ?, ?, ?, ?, ?)', p);
-    }
-  }
-
-  const [tripsRows] = await pool.query('SELECT COUNT(*) as count FROM travel_trips');
-  if (tripsRows[0].count === 0) {
-    const trips = [
-      ['Aarav Mehta', 'AM', 'PGDM 2026 · Sec B', 'Dabolim Airport drop', 'GIM Main Gate', 'Sat, 8 Aug · departs 5:30 AM', 2, 4, 'Cab', '₹600 each', 'Pre-booked Innova from GIM main gate.', 'Today']
-    ];
-    for (const t of trips) {
-      await pool.query('INSERT INTO travel_trips (user_name, user_initials, batch_info, title, pickup, date_time, seats_left, seats_total, vehicle_type, cost, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', t);
+      await pool.query('INSERT INTO explore_places (name, category, rating, distance, price, image, is_bookmarked, description, maps_url, best_time, est_cost, pro_tips) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', p);
     }
   }
 }
 
 function seedMemoryData() {
   memoryStore.rentals = [
-    { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'Campus scooter.', location: 'Sanquelim' },
-    { id: 2, title: 'Maruti Suzuki Swift', vendor: 'Sanq Cabs & Self Drive', category: 'Car', price_per_day: 1800, rating: 4.7, total_ratings: 54, distance: '2.0 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'AC Hatchback', image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'AC car.', location: 'Thivim' }
+    { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'Campus scooter.', location: 'Sanquelim' }
   ];
   memoryStore.explore_places = [
-    { id: 1, name: 'Arambol Beach', category: 'Beaches', rating: 4.7, distance: '38 km · 1 hr 10 min scooter', price: '₹400 per person', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', is_bookmarked: false }
+    { id: 1, name: 'Arambol Beach', category: 'Beaches', rating: 4.7, distance: '38 km · 1 hr 10 min scooter', price: '₹400 per person', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', is_bookmarked: false, description: 'Bohemian beach with freshwater lake.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Arambol+Beach+Goa', best_time: '5:00 PM – 7:30 PM', est_cost: '₹300 / person', pro_tips: 'Check out sunset drum circle.' }
   ];
-  memoryStore.travel_trips = [
-    { id: 1, user_name: 'Aarav Mehta', user_initials: 'AM', batch_info: 'PGDM 2026 · Sec B', title: 'Dabolim Airport drop', pickup: 'GIM Main Gate', date_time: 'Sat, 8 Aug · departs 5:30 AM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹600 each', description: 'Pre-booked Innova.', status: 'Today' }
+  memoryStore.place_reviews = [
+    { id: 1, place_id: 1, user_name: 'Rishi Hotwani', user_avatar: 'RH', rating: 5, comment: 'Amazing sunset spot!', created_at: new Date().toISOString() }
   ];
+  memoryStore.travel_trips = [];
 }
 
 export async function query(sql, params = []) {
@@ -284,51 +282,27 @@ export async function query(sql, params = []) {
     return results;
   }
   
-  // In-Memory Fallback Evaluator
   const lowerSql = sql.toLowerCase();
 
-  if (lowerSql.includes('select * from users where email')) {
-    return memoryStore.users.filter(u => u.email === params[0]);
+  if (lowerSql.includes('select * from place_reviews')) {
+    return memoryStore.place_reviews.filter(r => r.place_id === parseInt(params[0], 10));
   }
-  if (lowerSql.includes('select * from users where uuid')) {
-    return memoryStore.users.filter(u => u.uuid === params[0]);
-  }
-  if (lowerSql.includes('select * from users where id')) {
-    return memoryStore.users.filter(u => u.id === params[0]);
-  }
-  if (lowerSql.includes('select * from users where google_id')) {
-    return memoryStore.users.filter(u => u.google_id === params[0]);
-  }
-  if (lowerSql.includes('insert into users')) {
-    const newUser = {
-      id: memoryStore.users.length + 1,
-      uuid: params[0],
-      name: params[1],
-      email: params[2],
-      password_hash: params[3],
-      google_id: params[4] || null,
-      provider: params[5] || 'EMAIL',
-      avatar: params[6] || 'US',
-      email_verified: params[7] || false,
-      role: params[8] || 'USER',
-      is_active: true,
-      failed_login_attempts: 0,
-      lock_until: null,
-      last_login: null,
-      created_at: new Date(),
-      updated_at: new Date(),
-      deleted_at: null
+  if (lowerSql.includes('insert into place_reviews')) {
+    const newRev = {
+      id: memoryStore.place_reviews.length + 1,
+      place_id: parseInt(params[0], 10),
+      user_id: params[1] || null,
+      user_name: params[2],
+      user_avatar: params[3] || 'US',
+      rating: parseInt(params[4], 10),
+      comment: params[5],
+      created_at: new Date().toISOString()
     };
-    memoryStore.users.push(newUser);
-    return { insertId: newUser.id };
+    memoryStore.place_reviews.push(newRev);
+    return { insertId: newRev.id };
   }
-  if (lowerSql.includes('update users set')) {
-    return { affectedRows: 1 };
-  }
-  if (lowerSql.includes('select * from rentals')) return memoryStore.rentals;
   if (lowerSql.includes('select * from explore_places')) return memoryStore.explore_places;
-  if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips;
-  if (lowerSql.includes('select * from user_activities')) return memoryStore.user_activities;
+  if (lowerSql.includes('select * from rentals')) return memoryStore.rentals;
 
   return [];
 }

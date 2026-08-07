@@ -199,11 +199,63 @@ app.post('/api/rentals/:id/book', async (req, res, next) => {
   }
 });
 
-// Explore
+// Explore & Reviews
 app.get('/api/explore', async (req, res, next) => {
   try {
     const places = await query('SELECT * FROM explore_places ORDER BY id ASC');
     res.json(places);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get('/api/explore/:id/reviews', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const reviews = await query('SELECT * FROM place_reviews WHERE place_id = ? ORDER BY id DESC', [id]);
+    res.json(reviews);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/explore/:id/reviews', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { rating, comment, userName, userId } = req.body;
+
+    if (!rating || !comment) {
+      return res.status(400).json({ success: false, message: 'Rating (1-5) and comment text are required.' });
+    }
+
+    const name = userName || req.headers['x-user-name'] || 'Anonymous Student';
+    const avatar = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'US';
+    const numRating = parseInt(rating, 10);
+
+    const result = await query(
+      'INSERT INTO place_reviews (place_id, user_id, user_name, user_avatar, rating, comment) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, userId || null, name, avatar, numRating, comment]
+    );
+
+    const allReviews = await query('SELECT rating FROM place_reviews WHERE place_id = ?', [id]);
+    if (allReviews.length > 0) {
+      const avg = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
+      await query('UPDATE explore_places SET rating = ? WHERE id = ?', [avg.toFixed(1), id]);
+    }
+
+    await logAuditActivity(
+      userId || req.headers['x-user-id'] || null,
+      name,
+      'POST_PLACE_REVIEW',
+      `Posted ${numRating}-star review for place ID #${id}`,
+      { placeId: id, rating: numRating, comment }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Review and rating submitted successfully!',
+      id: result.insertId
+    });
   } catch (err) {
     next(err);
   }
