@@ -282,12 +282,68 @@ export async function initDatabase() {
 
     isInMemoryFallback = false;
     console.log(`✅ Connected to MySQL database on port ${ENV.DB.PORT}: ${ENV.DB.NAME}`);
+    await seedInitialData();
 
   } catch (err) {
     console.warn('⚠️ Could not connect to MySQL server:', err.message);
     console.warn('🔄 Initializing in-memory database fallback.');
     isInMemoryFallback = true;
+    seedMemoryData();
   }
+}
+
+async function seedInitialData() {
+  const [rentalsRows] = await pool.query('SELECT COUNT(*) as count FROM rentals');
+  if (rentalsRows[0].count === 0) {
+    const rentals = [
+      [null, 'Honda Activa 6G', 'Coastal Rides Sanquelim', 'Scooter', 350, 4.8, 132, '1.2 km away', 'Petrol', 'Automatic', 'Women friendly', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Reliable 110cc automatic scooter for smooth campus commute.', 'Sanquelim Gate', true],
+      [null, 'Royal Enfield Hunter 350', 'Goa Bike Rentals', 'Bike', 750, 4.9, 88, '0.8 km away', 'Petrol', 'Manual', 'Popular choice', 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', 'Cruiser bike ideal for North Goa beach road trips.', 'Mapusa Road', true],
+      [null, 'Maruti Suzuki Swift', 'Sanq Cabs & Self Drive', 'Car', 1800, 4.7, 54, '2.0 km away', 'Petrol', 'Manual', 'AC Hatchback', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', '5-seater AC hatchback with unlimited kilometers.', 'Thivim Station', true],
+      [null, 'TVS Jupiter 125', 'Campus Wheels', 'Scooter', 320, 4.6, 95, '0.5 km away', 'Petrol', 'Automatic', 'Budget friendly', 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', 'Economical 125cc scooter with spacious under-seat storage.', 'GIM Hostels', true]
+    ];
+    for (const r of rentals) {
+      await pool.query('INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', r);
+    }
+  }
+
+  const [exploreRows] = await pool.query('SELECT COUNT(*) as count FROM explore_places');
+  if (exploreRows[0].count === 0) {
+    const places = [
+      ['Arambol Beach', 'Beaches', 4.7, '38 km · 1 hr 10 min scooter', '₹400 per person', 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', false, 'Famous for its bohemian vibes, freshwater lake, cliffside cafes, and iconic sunset drum circles.', 'https://www.google.com/maps/search/?api=1&query=Arambol+Beach+Goa', '5:00 PM – 7:30 PM (Sunset)', '₹300 / person', 'Visit around 5 PM to see the famous beach drum circle.'],
+      ["Britto's, Baga", 'Food', 4.4, '33 km · 1 hr scooter', '₹700 per person', 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80', false, 'Legendary beachside restaurant in Baga known for fresh seafood and Goan fish curry.', 'https://www.google.com/maps/search/?api=1&query=Brittos+Baga+Goa', '7:00 PM – 11:00 PM (Dinner)', '₹700 / person', 'Try the butter garlic prawns and pork vindaloo.'],
+      ['Dudhsagar Falls', 'Waterfalls', 4.9, '72 km · 2 hr 15 min', '₹1200 per person', 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=800&q=80', true, 'Four-tiered waterfall offering breathtaking forest views and jeep treks.', 'https://www.google.com/maps/search/?api=1&query=Dudhsagar+Waterfalls+Goa', '9:00 AM – 2:00 PM (Day Trip)', '₹1200 / person', 'Life jackets mandatory. Start early from campus at 6 AM.'],
+      ['Ashwem Beach & La Plage', 'Beaches', 4.8, '34 km · 55 min scooter', '₹800 per person', 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', false, 'Upmarket, clean North Goa beach featuring the famous French fine dining spot La Plage, frequented by celebrities.', 'https://www.google.com/maps/search/?api=1&query=La+Plage+Ashwem+Beach+Goa', '1:00 PM – 4:00 PM (Lunch)', '₹800 – ₹1500 / person', 'La Plage offers world-class French cuisine, beachside armchairs, fairy lights, and amazing steaks.'],
+      ['Thalassa Greek Restaurant', 'Food', 4.9, '30 km · 50 min scooter', '₹1500 per person', 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80', true, 'Legendary cliffside Greek restaurant in Siolim offering Santorini vibes, panoramic ocean sunsets, and Mediterranean grills.', 'https://www.google.com/maps/search/?api=1&query=Thalassa+Restaurant+Siolim+Goa', '5:00 PM – 8:30 PM (Sunset)', '₹1200 – ₹2000 / person', 'Advance reservation is essential for sunset cliff tables! Features plate-breaking dance shows.'],
+      ['Mandrem Beach & Vaayu Cafe', 'Beaches', 4.7, '36 km · 1 hr scooter', '₹450 per person', 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=800&q=80', false, 'Serene beach and lagoon near Ashwem with water sports, SUP rentals, organic smoothie bowls, and cozy beachside cafes.', 'https://www.google.com/maps/search/?api=1&query=Mandrem+Beach+Vaayu+Goa', '7:00 AM – 11:00 AM (Breakfast)', '₹400 / person', 'Quiet street vibe. Great place for morning beach runs, organic smoothie bowls, and SUP paddle boarding.'],
+      ['Anjuna Flea Market & Trance Coast', 'Nightlife', 4.6, '32 km · 50 min scooter', '₹500 per person', 'https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&w=800&q=80', false, 'The birthplace of Goan trance music, vibrant bohemian flea markets, beach shacks, and eclectic party vibe.', 'https://www.google.com/maps/search/?api=1&query=Anjuna+Flea+Market+Goa', 'Wednesdays 10:00 AM – 6:00 PM', '₹300 – ₹600 / person', 'Bargain hard at the Wednesday flea market for silver jewelry, bohemian clothes, and handmade souvenirs.'],
+      ['Pink Chilli Restaurant', 'Food', 4.7, '31 km · 48 min scooter', '₹700 per person', 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80', false, 'Vibrant, highly Instagrammable North Indian restaurant with creative bohemian decor, signature cocktails, and rich curries.', 'https://www.google.com/maps/search/?api=1&query=Pink+Chilli+Restaurant+Goa', '7:30 PM – 11:00 PM (Dinner)', '₹600 – ₹1000 / person', 'Famous for stylish photo ops, bohemian outdoor seating, and authentic North Indian dishes.'],
+      ['Querim (Keri) Beach', 'Beaches', 4.8, '42 km · 1 hr 15 min scooter', '₹300 per person', 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', false, 'The northernmost beach in Goa, famous for its peaceful pine trees, historic Terekol river estuary, and secluded coast.', 'https://www.google.com/maps/search/?api=1&query=Querim+Keri+Beach+Goa', '4:00 PM – 6:30 PM (Sunset)', '₹200 – ₹400 / person', 'Quiet and untouched compared to Baga. Take the ferry across the river to Fort Tiracol for panoramic views.']
+    ];
+    for (const p of places) {
+      await pool.query('INSERT INTO explore_places (name, category, rating, distance, price, image, is_bookmarked, description, maps_url, best_time, est_cost, pro_tips) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', p);
+    }
+  }
+}
+
+function seedMemoryData() {
+  memoryStore.rentals = [
+    { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'Campus scooter.', location: 'Sanquelim' },
+    { id: 2, title: 'Royal Enfield Hunter 350', vendor: 'Goa Bike Rentals', category: 'Bike', price_per_day: 750, rating: 4.9, total_ratings: 88, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Popular choice', image: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'Cruiser bike.', location: 'Mapusa' },
+    { id: 3, title: 'Maruti Suzuki Swift', vendor: 'Sanq Cabs & Self Drive', category: 'Car', price_per_day: 1800, rating: 4.7, total_ratings: 54, distance: '2.0 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'AC Hatchback', image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', is_available: true, description: '5-seater AC hatchback.', location: 'Thivim' }
+  ];
+  memoryStore.explore_places = [
+    { id: 1, name: 'Arambol Beach', category: 'Beaches', rating: 4.7, distance: '38 km · 1 hr 10 min scooter', price: '₹400 per person', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', is_bookmarked: false, description: 'Bohemian beach with freshwater lake.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Arambol+Beach+Goa', best_time: '5:00 PM – 7:30 PM', est_cost: '₹300 / person', pro_tips: 'Check out sunset drum circle.' },
+    { id: 2, name: 'Ashwem Beach & La Plage', category: 'Beaches', rating: 4.8, distance: '34 km · 55 min scooter', price: '₹800 per person', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', is_bookmarked: false, description: 'Clean beach with French fine dining.', maps_url: 'https://www.google.com/maps/search/?api=1&query=La+Plage+Ashwem+Beach+Goa', best_time: '1:00 PM – 4:00 PM', est_cost: '₹800 / person', pro_tips: 'Try the steak at La Plage.' },
+    { id: 3, name: 'Thalassa Greek Restaurant', category: 'Food', rating: 4.9, distance: '30 km · 50 min scooter', price: '₹1500 per person', image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80', is_bookmarked: true, description: 'Cliffside Greek dining.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Thalassa+Restaurant+Siolim+Goa', best_time: '5:00 PM – 8:30 PM', est_cost: '₹1200 / person', pro_tips: 'Book in advance for sunset.' },
+    { id: 4, name: 'Mandrem Beach & Vaayu Cafe', category: 'Beaches', rating: 4.7, distance: '36 km · 1 hr scooter', price: '₹450 per person', image: 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=800&q=80', is_bookmarked: false, description: 'Serene beach & SUP paddleboarding.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Mandrem+Beach+Vaayu+Goa', best_time: '7:00 AM – 11:00 AM', est_cost: '₹400 / person', pro_tips: 'Morning beach runs & smoothie bowls.' },
+    { id: 5, name: 'Dudhsagar Falls', category: 'Waterfalls', rating: 4.9, distance: '72 km · 2 hr 15 min', price: '₹1200 per person', image: 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=800&q=80', is_bookmarked: true, description: 'Four-tiered waterfall jeep trek.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Dudhsagar+Waterfalls+Goa', best_time: '9:00 AM – 2:00 PM', est_cost: '₹1200 / person', pro_tips: 'Life jackets mandatory.' }
+  ];
+  memoryStore.place_reviews = [
+    { id: 1, place_id: 1, user_name: 'Rishi Hotwani', user_avatar: 'RH', rating: 5, comment: 'Amazing sunset spot!', created_at: new Date().toISOString() }
+  ];
+  memoryStore.travel_trips = [
+    { id: 1, user_name: 'Rahul Verma', user_initials: 'RV', batch_info: 'PGDM 2026', title: 'Airport Share (Goa MOPA to GIM Campus)', pickup: 'MOPA Airport Terminal', date_time: 'Today 6:00 PM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹450 each', description: 'Flight arrives 5:30 PM. 2 seats free for GIM students.', status: 'Today' }
+  ];
 }
 
 export async function query(sql, params = []) {
@@ -387,6 +443,7 @@ export async function query(sql, params = []) {
   }
   if (lowerSql.includes('select * from explore_places')) return memoryStore.explore_places;
   if (lowerSql.includes('select * from rentals')) return memoryStore.rentals;
+  if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips;
 
   return [];
 }
