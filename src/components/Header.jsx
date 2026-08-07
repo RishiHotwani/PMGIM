@@ -1,7 +1,10 @@
-import React from 'react';
-import { Bell, LogOut, Compass, Bike, Users, Home, User, Store } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bell, LogOut, Compass, Bike, Users, Home, User, Store, Check, Sparkles, Inbox } from 'lucide-react';
 
 export default function Header({ currentUser, onLogout, activeTab, setActiveTab }) {
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+
   const isVendor = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN';
 
   const navItems = [
@@ -12,6 +15,46 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
     { id: 'travel', label: 'Travel Board', icon: Users },
     { id: 'profile', label: 'Profile', icon: User },
   ];
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch('/api/notifications', {
+        headers: {
+          'x-user-id': currentUser?.id || '',
+          'x-user-name': currentUser?.name || 'User'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+      }
+    } catch (err) {
+      console.error('Fetch notifications error:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 10000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const handleMarkAllRead = async () => {
+    try {
+      await fetch('/api/notifications/read-all', {
+        method: 'PATCH',
+        headers: {
+          'x-user-id': currentUser?.id || '',
+          'x-user-name': currentUser?.name || 'User'
+        }
+      });
+      fetchNotifications();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Student';
 
@@ -68,12 +111,72 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
         </nav>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 relative">
           {/* Notification Bell */}
-          <button className="relative p-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors flex items-center justify-center">
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-orange-500 ring-2 ring-white"></span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+              className="relative p-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors flex items-center justify-center"
+              title="Notifications"
+            >
+              <Bell className="w-4 h-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-extrabold ring-2 ring-white animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Notification Dropdown Panel */}
+            {showNotifDropdown && (
+              <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-100 p-4 z-50 animate-fadeIn space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-blue-600" />
+                    <h4 className="font-black text-xs text-slate-900">Activity & Updates</h4>
+                  </div>
+                  {notifications.length > 0 && unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <Check className="w-3 h-3" /> Mark read
+                    </button>
+                  )}
+                </div>
+
+                {notifications.length === 0 ? (
+                  /* Glassmorphic Default Value of No Activity Yet */
+                  <div className="p-6 bg-slate-900/5 backdrop-blur-md rounded-2xl border border-white/40 text-center space-y-2 my-2">
+                    <Inbox className="w-8 h-8 text-slate-400 mx-auto stroke-[1.5]" />
+                    <p className="font-extrabold text-xs text-slate-800">No Activity Yet</p>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      You will get live alerts when Vendors list vehicles, students join your rides, or reviews are posted!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+                    {notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`p-3 rounded-2xl text-xs space-y-1 transition-colors ${
+                          n.is_read ? 'bg-slate-50 text-slate-600' : 'bg-blue-50/80 border border-blue-200/60 text-slate-900 font-medium'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs">{n.title}</span>
+                          <span className="text-[10px] font-bold text-slate-400">
+                            {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed">{n.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* User Profile Avatar */}
           <button
