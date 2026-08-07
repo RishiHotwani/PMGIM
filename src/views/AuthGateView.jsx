@@ -24,9 +24,9 @@ export default function AuthGateView({ onAuthSuccess }) {
   const [loading, setLoading] = useState(false);
   const [gisLoaded, setGisLoaded] = useState(false);
 
-  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '460937107777-5lifbfpuskp3bcfifv00f68bs2qib4k6.apps.googleusercontent.com';
 
-  // Initialize Google Identity Services (GIS) ONLY if a valid Client ID is configured
+  // Initialize Google Identity Services (GIS)
   useEffect(() => {
     if (GOOGLE_CLIENT_ID && window.google?.accounts?.id) {
       try {
@@ -165,9 +165,9 @@ export default function AuthGateView({ onAuthSuccess }) {
         {/* Google OAuth Section */}
         {mode !== 'forgot' && (
           <div className="space-y-3">
-            {GOOGLE_CLIENT_ID && <div id="gis-button-wrapper" className="flex justify-center w-full min-h-[44px]" />}
+            <div id="gis-button-wrapper" className="flex justify-center w-full min-h-[44px]"></div>
 
-            {(!GOOGLE_CLIENT_ID || !gisLoaded) && (
+            {!gisLoaded && (
               <button
                 type="button"
                 onClick={handleGoogleButtonClick}

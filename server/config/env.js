@@ -29,7 +29,7 @@ export const ENV = {
   },
 
   GOOGLE: {
-    CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+    CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '460937107777-5lifbfpuskp3bcfifv00f68bs2qib4k6.apps.googleusercontent.com',
     CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
   }
 };
