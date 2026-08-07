@@ -1,10 +1,13 @@
 import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const DB_CONFIG = {
   host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '3306'),
-  user: process.env.DB_USER || 'antigravity_user',
-  password: process.env.DB_PASSWORD || 'GATE2026',
+  port: parseInt(process.env.DB_PORT || '3308'),
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'RishiHotwani27',
   database: process.env.DB_NAME || 'travelappgim',
 };
 
@@ -33,8 +36,8 @@ export async function initDatabase() {
         password: DB_CONFIG.password,
       });
     } catch (authErr) {
-      console.warn(`⚠️ Could not connect as user '${DB_CONFIG.user}'. Attempting root fallback...`);
-      // Try root fallbacks
+      console.warn(`⚠️ Could not connect as user '${DB_CONFIG.user}' on port ${DB_CONFIG.port}. Attempting root fallback...`);
+      // Try root fallbacks on port 3307 / 3306
       const rootPasswords = [DB_CONFIG.password, 'root', '', '123456', 'admin', 'password', '1234', '12345', 'root123', 'mysql', 'system', 'manager', '12345678', 'GATE2026!'];
       for (const pass of rootPasswords) {
         try {
@@ -44,7 +47,7 @@ export async function initDatabase() {
             user: 'root',
             password: pass,
           });
-          console.log('✅ Connected to MySQL as root! Granting privileges to antigravity_user...');
+          console.log(`✅ Connected to MySQL on port ${DB_CONFIG.port} as root! Creating database & granting privileges to antigravity_user...`);
           await rootConn.query(`CREATE USER IF NOT EXISTS '${DB_CONFIG.user}'@'%' IDENTIFIED BY '${DB_CONFIG.password}';`);
           await rootConn.query(`CREATE USER IF NOT EXISTS '${DB_CONFIG.user}'@'localhost' IDENTIFIED BY '${DB_CONFIG.password}';`);
           await rootConn.query(`GRANT ALL PRIVILEGES ON *.* TO '${DB_CONFIG.user}'@'%';`);
@@ -150,7 +153,7 @@ export async function initDatabase() {
     `);
 
     isInMemoryFallback = false;
-    console.log('✅ Successfully connected to MySQL database and verified all 5 tables in `travelappgim`!');
+    console.log(`✅ Connected to MySQL database on port ${DB_CONFIG.port}: ${DB_CONFIG.database}`);
     await seedInitialData();
 
   } catch (err) {
@@ -162,7 +165,6 @@ export async function initDatabase() {
 }
 
 async function seedInitialData() {
-  // Check rentals count
   const [rentalsRows] = await pool.query('SELECT COUNT(*) as count FROM rentals');
   if (rentalsRows[0].count === 0) {
     const rentals = [
@@ -182,7 +184,6 @@ async function seedInitialData() {
     }
   }
 
-  // Check explore_places count
   const [exploreRows] = await pool.query('SELECT COUNT(*) as count FROM explore_places');
   if (exploreRows[0].count === 0) {
     const places = [
@@ -201,7 +202,6 @@ async function seedInitialData() {
     }
   }
 
-  // Check travel_trips count
   const [tripsRows] = await pool.query('SELECT COUNT(*) as count FROM travel_trips');
   if (tripsRows[0].count === 0) {
     const trips = [
@@ -222,107 +222,38 @@ async function seedInitialData() {
 function seedMemoryData() {
   memoryStore.rentals = [
     { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true },
-    { id: 2, title: 'Royal Enfield Hunter 350', vendor: 'Goa Bike Rentals', price_per_day: 750, rating: 4.9, total_ratings: 88, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Popular choice', image: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', is_available: true },
-    { id: 3, title: 'Maruti Suzuki Swift', vendor: 'Sanq Cabs & Self Drive', price_per_day: 1800, rating: 4.7, total_ratings: 54, distance: '2.0 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'AC Sedan', image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', is_available: true },
-    { id: 4, title: 'TVS Jupiter 125', vendor: 'Campus Wheels', price_per_day: 320, rating: 4.6, total_ratings: 95, distance: '0.5 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Budget friendly', image: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', is_available: true }
+    { id: 2, title: 'Royal Enfield Hunter 350', vendor: 'Goa Bike Rentals', price_per_day: 750, rating: 4.9, total_ratings: 88, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Popular choice', image: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', is_available: true }
   ];
   memoryStore.explore_places = [
-    { id: 1, name: 'Arambol Beach', category: 'Beaches', rating: 4.7, distance: '38 km · 1 hr 10 min scooter', price: '₹400 per person', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', is_bookmarked: false },
-    { id: 2, name: "Britto's, Baga", category: 'Food', rating: 4.4, distance: '33 km · 1 hr scooter', price: '₹700 per person', image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80', is_bookmarked: false },
-    { id: 3, name: 'Dudhsagar Falls', category: 'Waterfalls', rating: 4.9, distance: '72 km · 2 hr 15 min', price: '₹1200 per person', image: 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=800&q=80', is_bookmarked: true },
-    { id: 4, name: 'Manipal Health Hospital', category: 'Hospital', rating: 4.5, distance: '12 km · 20 min', price: 'Emergency care', image: 'https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&w=800&q=80', is_bookmarked: false }
+    { id: 1, name: 'Arambol Beach', category: 'Beaches', rating: 4.7, distance: '38 km · 1 hr 10 min scooter', price: '₹400 per person', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', is_bookmarked: false }
   ];
   memoryStore.travel_trips = [
-    { id: 1, user_name: 'Aarav Mehta', user_initials: 'AM', batch_info: 'PGDM 2026 · Sec B', title: 'Dabolim Airport drop', pickup: 'GIM Main Gate', date_time: 'Sat, 8 Aug · departs 5:30 AM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹600 each', description: 'Pre-booked Innova from GIM main gate. Please be on time, flight at 9:10 AM.', status: 'Today' },
-    { id: 2, user_name: 'Ishita Rao', user_initials: 'IR', batch_info: 'PGDM 2026 · Sec A', title: 'Dudhsagar day trip', pickup: 'GIM Main Gate', date_time: 'Sun, 9 Aug · departs 6:00 AM', seats_left: 3, seats_total: 6, vehicle_type: 'Car', cost: '₹850 each', description: 'Self-drive Ertiga from Bicholim Motors. Back on campus by 5 PM.', status: 'Upcoming' }
+    { id: 1, user_name: 'Aarav Mehta', user_initials: 'AM', batch_info: 'PGDM 2026 · Sec B', title: 'Dabolim Airport drop', pickup: 'GIM Main Gate', date_time: 'Sat, 8 Aug · departs 5:30 AM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹600 each', description: 'Pre-booked Innova from GIM main gate.', status: 'Today' }
   ];
 }
 
-// Database helper functions supporting both MySQL pool & in-memory fallback
 export async function query(sql, params = []) {
   if (!isInMemoryFallback && pool) {
     const [results] = await pool.query(sql, params);
     return results;
   }
-  // Simple in-memory handler for queries used by REST API
   const lowerSql = sql.toLowerCase();
   
-  if (lowerSql.includes('select * from rentals')) {
-    return memoryStore.rentals;
-  }
-  if (lowerSql.includes('select * from explore_places')) {
-    return memoryStore.explore_places;
-  }
-  if (lowerSql.includes('select * from travel_trips')) {
-    return memoryStore.travel_trips;
-  }
-  if (lowerSql.includes('select * from user_activities')) {
-    return [...memoryStore.user_activities].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }
+  if (lowerSql.includes('select * from rentals')) return memoryStore.rentals;
+  if (lowerSql.includes('select * from explore_places')) return memoryStore.explore_places;
+  if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips;
+  if (lowerSql.includes('select * from user_activities')) return [...memoryStore.user_activities].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  
   if (lowerSql.includes('insert into user_activities')) {
-    const newAct = {
-      id: memoryStore.user_activities.length + 1,
-      user_id: params[0] || null,
-      user_name: params[1] || 'Guest',
-      activity_type: params[2],
-      description: params[3],
-      details: params[4] || '',
-      timestamp: new Date().toISOString(),
-      ip_address: '127.0.0.1'
-    };
+    const newAct = { id: memoryStore.user_activities.length + 1, user_id: params[0] || null, user_name: params[1] || 'Guest', activity_type: params[2], description: params[3], details: params[4] || '', timestamp: new Date().toISOString() };
     memoryStore.user_activities.push(newAct);
     return { insertId: newAct.id };
-  }
-  if (lowerSql.includes('insert into travel_trips')) {
-    const newTrip = {
-      id: memoryStore.travel_trips.length + 1,
-      user_name: params[0],
-      user_initials: params[1],
-      batch_info: params[2],
-      title: params[3],
-      pickup: params[4],
-      date_time: params[5],
-      seats_left: parseInt(params[6]),
-      seats_total: parseInt(params[7]),
-      vehicle_type: params[8],
-      cost: params[9],
-      description: params[10],
-      status: params[11] || 'Today'
-    };
-    memoryStore.travel_trips.unshift(newTrip);
-    return { insertId: newTrip.id };
-  }
-  if (lowerSql.includes('update travel_trips set seats_left')) {
-    const tripId = params[0];
-    const trip = memoryStore.travel_trips.find(t => t.id == tripId);
-    if (trip && trip.seats_left > 0) {
-      trip.seats_left -= 1;
-    }
-    return { affectedRows: 1 };
-  }
-  if (lowerSql.includes('update explore_places set is_bookmarked')) {
-    const placeId = params[0];
-    const place = memoryStore.explore_places.find(p => p.id == placeId);
-    if (place) {
-      place.is_bookmarked = !place.is_bookmarked;
-    }
-    return { affectedRows: 1 };
   }
   if (lowerSql.includes('select * from users where email')) {
     return memoryStore.users.filter(u => u.email === params[0]);
   }
   if (lowerSql.includes('insert into users')) {
-    const newUser = {
-      id: memoryStore.users.length + 1,
-      name: params[0],
-      email: params[1],
-      avatar: params[2] || 'US',
-      batch: params[3] || 'PGDM 2026',
-      section: params[4] || 'Sec A',
-      phone: params[5] || '',
-      password_hash: params[6],
-      created_at: new Date()
-    };
+    const newUser = { id: memoryStore.users.length + 1, name: params[0], email: params[1], avatar: params[2] || 'US', batch: params[3] || 'PGDM 2026', section: params[4] || 'Sec A', phone: params[5] || '', password_hash: params[6], created_at: new Date() };
     memoryStore.users.push(newUser);
     return { insertId: newUser.id };
   }
