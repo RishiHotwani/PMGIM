@@ -119,14 +119,14 @@ export default function AuthGateView({ onAuthSuccess }) {
       <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10 space-y-5 border border-slate-100 animate-fadeIn">
         {/* Header Logo */}
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-2xl mx-auto shadow-lg shadow-blue-500/30">
-            GIM
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-500 via-indigo-500 to-sky-400 text-white flex items-center justify-center font-black text-2xl mx-auto shadow-lg shadow-blue-500/30 border border-white/20">
+            BG
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            PMGIM <span className="text-blue-600">Travel</span>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+            Beyond<span className="text-blue-600">Goa</span>
           </h1>
           <p className="text-xs text-slate-500 font-medium">
-            Goa Institute of Management • Student & Vendor Platform
+            Campus Mobility & Recommended Experiences
           </p>
         </div>
 

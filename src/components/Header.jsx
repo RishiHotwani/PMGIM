@@ -59,37 +59,37 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
   const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Student';
 
   return (
-    <header className="w-full bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
-      <div className="w-full px-4 sm:px-6 lg:px-12 py-3.5 flex items-center justify-between gap-4">
+    <header className="w-full bg-slate-950/80 backdrop-blur-2xl border-b border-white/10 sticky top-0 z-30 shadow-2xl transition-all duration-300">
+      <div className="w-full px-4 sm:px-6 lg:px-12 py-3 flex items-center justify-between gap-4">
         {/* Left: Brand Logo & Greeting */}
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setActiveTab('home')}
-            className="flex items-center gap-2.5 group text-left"
+            className="flex items-center gap-3 group text-left focus:outline-none"
           >
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-lg shadow-md shadow-blue-500/25 group-hover:scale-105 transition-transform">
-              GIM
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-500 via-indigo-500 to-sky-400 text-white flex items-center justify-center font-black text-xl shadow-lg shadow-blue-500/30 group-hover:scale-105 group-active:scale-95 transition-all duration-300 border border-white/20">
+              BG
             </div>
             <div>
-              <span className="font-extrabold text-slate-900 text-base md:text-lg leading-tight tracking-tight block">
-                PMGIM <span className="text-blue-600">Travel</span>
+              <span className="font-black text-white text-lg tracking-tight block leading-tight">
+                Beyond<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-sky-300">Goa</span>
               </span>
-              <span className="text-[10px] font-semibold text-slate-400 block -mt-0.5">
-                Goa Campus Mobility
+              <span className="text-[10px] font-semibold text-slate-400 block -mt-0.5 tracking-wide">
+                Campus Mobility & Travel
               </span>
             </div>
           </button>
 
-          <div className="hidden xl:flex items-center gap-2 ml-4 pl-4 border-l border-slate-200">
+          <div className="hidden xl:flex items-center gap-2 ml-4 pl-4 border-l border-white/15">
             <span className="text-xs text-slate-400 font-medium">Welcome,</span>
-            <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
-              {firstName} 👋 {isVendor && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-extrabold rounded-md">Vendor</span>}
+            <span className="text-xs font-extrabold text-white flex items-center gap-1.5">
+              {firstName} 👋 {isVendor && <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 text-[10px] font-black rounded-md uppercase tracking-wider">Vendor</span>}
             </span>
           </div>
         </div>
 
-        {/* Center: Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/60">
+        {/* Center: Desktop Navigation Links (iOS Segmented Pill Control) */}
+        <nav className="hidden md:flex items-center gap-1 bg-white/10 backdrop-blur-xl p-1.5 rounded-full border border-white/15 shadow-inner">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -97,13 +97,13 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs transition-all duration-300 ${
                   isActive
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    ? 'bg-white text-slate-950 font-black shadow-lg shadow-white/20 scale-105'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10 font-bold'
                 }`}
               >
-                <Icon className="w-4 h-4 stroke-[2.2]" />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-blue-600 stroke-[2.5]' : 'stroke-[2]'}`} />
                 <span>{item.label}</span>
               </button>
             );
@@ -111,17 +111,17 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
         </nav>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 sm:gap-2.5 relative">
+        <div className="flex items-center gap-2.5 relative">
           {/* Notification Bell */}
           <div className="relative">
             <button
               onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-              className="relative p-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors flex items-center justify-center"
+              className="relative p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-slate-200 border border-white/15 backdrop-blur-md transition-all active:scale-95 flex items-center justify-center"
               title="Notifications"
             >
               <Bell className="w-4 h-4" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-extrabold ring-2 ring-white animate-pulse">
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black ring-2 ring-slate-950 animate-pulse">
                   {unreadCount}
                 </span>
               )}
@@ -129,16 +129,16 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
 
             {/* Notification Dropdown Panel */}
             {showNotifDropdown && (
-              <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-100 p-4 z-50 animate-fadeIn space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-slate-900/90 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/15 p-4 z-50 animate-fadeIn space-y-3 text-white">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-blue-600" />
-                    <h4 className="font-black text-xs text-slate-900">Activity & Updates</h4>
+                    <Sparkles className="w-4 h-4 text-blue-400" />
+                    <h4 className="font-black text-xs">Activity & Updates</h4>
                   </div>
                   {notifications.length > 0 && unreadCount > 0 && (
                     <button
                       onClick={handleMarkAllRead}
-                      className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                      className="text-[11px] font-bold text-blue-400 hover:underline flex items-center gap-1"
                     >
                       <Check className="w-3 h-3" /> Mark read
                     </button>
@@ -146,11 +146,10 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
                 </div>
 
                 {notifications.length === 0 ? (
-                  /* Glassmorphic Default Value of No Activity Yet */
-                  <div className="p-6 bg-slate-900/5 backdrop-blur-md rounded-2xl border border-white/40 text-center space-y-2 my-2">
+                  <div className="p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 text-center space-y-2 my-2">
                     <Inbox className="w-8 h-8 text-slate-400 mx-auto stroke-[1.5]" />
-                    <p className="font-extrabold text-xs text-slate-800">No Activity Yet</p>
-                    <p className="text-[11px] text-slate-500 font-medium">
+                    <p className="font-black text-xs text-white">No Activity Yet</p>
+                    <p className="text-[11px] text-slate-400 font-medium">
                       You will get live alerts when Vendors list vehicles, students join your rides, or reviews are posted!
                     </p>
                   </div>
@@ -160,7 +159,7 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
                       <div
                         key={n.id}
                         className={`p-3 rounded-2xl text-xs space-y-1 transition-colors ${
-                          n.is_read ? 'bg-slate-50 text-slate-600' : 'bg-blue-50/80 border border-blue-200/60 text-slate-900 font-medium'
+                          n.is_read ? 'bg-white/5 text-slate-300' : 'bg-blue-600/20 border border-blue-400/30 text-white font-medium'
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -169,7 +168,7 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
                             {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-600 leading-relaxed">{n.message}</p>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">{n.message}</p>
                       </div>
                     ))}
                   </div>
@@ -181,13 +180,13 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
           {/* User Profile Avatar */}
           <button
             onClick={() => setActiveTab('profile')}
-            className="flex items-center gap-2 p-1 pr-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 transition-colors"
+            className="flex items-center gap-2 p-1 pr-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 backdrop-blur-md transition-all active:scale-95"
             title={`${currentUser?.name} (${currentUser?.role})`}
           >
-            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-md border border-white/20">
               {currentUser?.avatar || 'US'}
             </div>
-            <span className="hidden lg:inline text-xs font-bold text-slate-800">
+            <span className="hidden lg:inline text-xs font-bold text-slate-200">
               {firstName}
             </span>
           </button>
@@ -195,7 +194,7 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
           {/* Log Out Button */}
           <button
             onClick={onLogout}
-            className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+            className="p-2.5 rounded-2xl bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-white/10 backdrop-blur-md transition-all active:scale-95"
             title="Log Out"
           >
             <LogOut className="w-4 h-4" />

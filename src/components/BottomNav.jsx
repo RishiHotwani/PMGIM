@@ -11,7 +11,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 px-3 py-2 flex items-center justify-around shadow-lg">
+    <nav className="md:hidden fixed bottom-4 left-4 right-4 z-40 max-w-md mx-auto bg-slate-950/80 backdrop-blur-2xl border border-white/15 rounded-full p-2 shadow-2xl shadow-slate-950/60 flex items-center justify-around transition-all duration-300">
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;
@@ -19,20 +19,22 @@ export default function BottomNav({ activeTab, setActiveTab }) {
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id)}
-            className={`flex flex-col items-center justify-center transition-all duration-200 ${
-              isActive ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+            className={`flex flex-col items-center justify-center transition-all duration-300 active:scale-90 ${
+              isActive ? 'text-white' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <div
-              className={`p-1.5 rounded-full transition-all duration-200 ${
-                isActive ? 'bg-blue-50 text-blue-600 px-4' : ''
+              className={`p-2 rounded-full transition-all duration-300 flex items-center gap-1.5 ${
+                isActive ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 shadow-lg shadow-blue-500/40 scale-105 border border-white/20' : 'hover:bg-white/10'
               }`}
             >
-              <Icon className="w-5 h-5 stroke-[2.2]" />
+              <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-[2]'}`} />
+              {isActive && (
+                <span className="text-[11px] font-black tracking-wide animate-fadeIn">
+                  {item.label}
+                </span>
+              )}
             </div>
-            <span className={`text-[11px] font-medium mt-0.5 ${isActive ? 'font-bold text-blue-600' : ''}`}>
-              {item.label}
-            </span>
           </button>
         );
       })}
