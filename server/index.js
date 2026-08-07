@@ -1,156 +1,68 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import { initDatabase, query, logActivity } from './db.js';
-
-dotenv.config();
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import { ENV } from './config/env.js';
+import { initDatabase, query } from './config/database.js';
+import { logAuditActivity } from './utils/logger.js';
+import authRouter from './modules/auth/auth.routes.js';
+import { globalRateLimiter } from './middleware/rateLimiter.js';
+import { globalErrorHandler } from './middleware/errorHandler.js';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = ENV.PORT || 5000;
 
-app.use(cors());
+// Security Headers & Cookies Middleware
+app.use(helmet({
+  contentSecurityPolicy: false // Allows inline scripts for GIS SDK
+}));
+app.use(cookieParser(ENV.COOKIES.SECRET));
+
+// CORS Configuration (Strict Origins)
+app.use(cors({
+  origin: [ENV.FRONTEND_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-user-name']
+}));
+
 app.use(express.json());
+app.use(globalRateLimiter);
 
-// Middleware to log API request activities automatically to MySQL
+// Middleware for Request Logging
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/') && !req.path.includes('/activities')) {
     const activityName = `${req.method} ${req.path}`;
-    logActivity(
+    logAuditActivity(
       req.headers['x-user-id'] || null,
       req.headers['x-user-name'] || 'Guest',
       'API_REQUEST',
       activityName,
-      JSON.stringify(req.body || {})
-    ).catch(err => console.error('Error logging activity:', err));
+      { path: req.path, method: req.method }
+    ).catch(err => console.error('Logging error:', err));
   }
   next();
 });
 
-// Initialize MySQL database connection
+// Initialize MySQL Database
 initDatabase();
 
-// ----------------- AUTH ROUTES -----------------
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { name, email, password, batch, section, phone } = req.body;
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, Email and Password are required' });
-    }
-    
-    // Check existing user in MySQL
-    const existing = await query('SELECT * FROM users WHERE email = ?', [email]);
-    if (existing && existing.length > 0) {
-      return res.status(400).json({ error: 'An account with this email already exists. Please Log In.' });
-    }
-
-    const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'US';
-    
-    const result = await query(
-      'INSERT INTO users (name, email, avatar, batch, section, phone, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, email, initials, batch || 'PGDM 2026', section || 'Sec A', phone || '', password]
-    );
-
-    const user = {
-      id: result.insertId || Date.now(),
-      name,
-      email,
-      avatar: initials,
-      batch: batch || 'PGDM 2026',
-      section: section || 'Sec A',
-      phone: phone || '',
-      auth_method: 'email'
-    };
-
-    // Log User Signup event to MySQL database
-    await logActivity(user.id, user.name, 'USER_SIGNUP', `New user signed up: ${user.name} (${user.email})`, JSON.stringify({ batch: user.batch, section: user.section }));
-    res.json({ success: true, user });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
-
-    const users = await query('SELECT * FROM users WHERE email = ?', [email]);
-    if (!users || users.length === 0) {
-      return res.status(401).json({ error: 'Account not found. Please Sign Up first.' });
-    }
-    
-    const user = users[0];
-    if (user.password_hash !== password) {
-      return res.status(401).json({ error: 'Incorrect password' });
-    }
-
-    delete user.password_hash;
-    user.auth_method = 'email';
-
-    // Log User Login event to MySQL database
-    await logActivity(user.id, user.name, 'USER_LOGIN', `User logged in: ${user.name} (${user.email})`);
-    res.json({ success: true, user });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Google OAuth Endpoint
-app.post('/api/auth/google', async (req, res) => {
-  try {
-    const { email, name, googleId } = req.body;
-    if (!email || !name) {
-      return res.status(400).json({ error: 'Google Account Profile data required' });
-    }
-
-    const users = await query('SELECT * FROM users WHERE email = ?', [email]);
-    const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'GO';
-
-    if (users && users.length > 0) {
-      const user = users[0];
-      delete user.password_hash;
-      user.auth_method = 'google';
-      await logActivity(user.id, user.name, 'USER_GOOGLE_LOGIN', `User logged in via Google OAuth: ${user.name} (${user.email})`);
-      return res.json({ success: true, user });
-    } else {
-      // Auto Sign Up via Google OAuth into MySQL database
-      const result = await query(
-        'INSERT INTO users (name, email, avatar, batch, section, phone, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [name, email, initials, 'PGDM 2026', 'Sec B', '', `google_oauth_${googleId || Date.now()}`]
-      );
-
-      const user = {
-        id: result.insertId || Date.now(),
-        name,
-        email,
-        avatar: initials,
-        batch: 'PGDM 2026',
-        section: 'Sec B',
-        phone: '',
-        auth_method: 'google'
-      };
-
-      await logActivity(user.id, user.name, 'USER_GOOGLE_SIGNUP', `New user registered via Google OAuth: ${user.name} (${user.email})`);
-      return res.json({ success: true, user });
-    }
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Mount Authentication & User Routes
+app.use('/api/auth', authRouter);
+app.use('/auth', authRouter); // Backward compatibility
+app.use('/users', authRouter);
 
 // ----------------- RENTALS ROUTES -----------------
-app.get('/api/rentals', async (req, res) => {
+app.get('/api/rentals', async (req, res, next) => {
   try {
     const rentals = await query('SELECT * FROM rentals ORDER BY id ASC');
     res.json(rentals);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.post('/api/rentals/:id/book', async (req, res) => {
+app.post('/api/rentals/:id/book', async (req, res, next) => {
   try {
     const { id } = req.params;
     const { userName, userId, days } = req.body;
@@ -158,36 +70,36 @@ app.post('/api/rentals/:id/book', async (req, res) => {
     const rentals = await query('SELECT * FROM rentals WHERE id = ?', [id]);
     const vehicle = rentals[0] || { title: `Vehicle #${id}` };
 
-    await logActivity(
+    await logAuditActivity(
       userId || req.headers['x-user-id'] || null,
       userName || req.headers['x-user-name'] || 'User',
       'RENTAL_BOOKING',
       `Booked vehicle ${vehicle.title} for ${days || 1} day(s)`,
-      JSON.stringify({ vehicleId: id, vehicleTitle: vehicle.title, days, pricePerDay: vehicle.price_per_day })
+      { vehicleId: id, vehicleTitle: vehicle.title, days, pricePerDay: vehicle.price_per_day }
     );
 
     res.json({ success: true, message: `Successfully booked ${vehicle.title}!` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ----------------- EXPLORE PLACES ROUTES -----------------
-app.get('/api/explore', async (req, res) => {
+app.get('/api/explore', async (req, res, next) => {
   try {
     const places = await query('SELECT * FROM explore_places ORDER BY id ASC');
     res.json(places);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.post('/api/explore/:id/bookmark', async (req, res) => {
+app.post('/api/explore/:id/bookmark', async (req, res, next) => {
   try {
     const { id } = req.params;
     await query('UPDATE explore_places SET is_bookmarked = NOT is_bookmarked WHERE id = ?', [id]);
     
-    await logActivity(
+    await logAuditActivity(
       req.headers['x-user-id'] || null,
       req.headers['x-user-name'] || 'User',
       'TOGGLE_BOOKMARK',
@@ -196,21 +108,21 @@ app.post('/api/explore/:id/bookmark', async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ----------------- TRAVEL TRIPS (RIDE SHARING) ROUTES -----------------
-app.get('/api/trips', async (req, res) => {
+app.get('/api/trips', async (req, res, next) => {
   try {
     const trips = await query('SELECT * FROM travel_trips ORDER BY id DESC');
     res.json(trips);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.post('/api/trips', async (req, res) => {
+app.post('/api/trips', async (req, res, next) => {
   try {
     const { title, pickup, date_time, seats_total, vehicle_type, cost, description, userName, userInitials, batchInfo, userId } = req.body;
     
@@ -234,61 +146,44 @@ app.post('/api/trips', async (req, res) => {
       ]
     );
 
-    await logActivity(
+    await logAuditActivity(
       userId || req.headers['x-user-id'] || null,
       userName || req.headers['x-user-name'] || 'User',
       'POST_TRIP',
       `Created new travel buddy ride: ${title}`,
-      JSON.stringify({ pickup, date_time, seats_total, cost })
+      { pickup, date_time, seats_total, cost }
     );
 
     res.json({ success: true, id: result.insertId });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-app.post('/api/trips/:id/join', async (req, res) => {
+app.post('/api/trips/:id/join', async (req, res, next) => {
   try {
     const { id } = req.params;
     const { userName, userId } = req.body;
     
     await query('UPDATE travel_trips SET seats_left = GREATEST(seats_left - 1, 0) WHERE id = ?', [id]);
     
-    await logActivity(
+    await logAuditActivity(
       userId || req.headers['x-user-id'] || null,
       userName || req.headers['x-user-name'] || 'User',
       'JOIN_TRIP',
       `Joined travel ride ID #${id}`,
-      JSON.stringify({ tripId: id })
+      { tripId: id }
     );
 
     res.json({ success: true, message: 'Joined trip successfully!' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
-// ----------------- USER ACTIVITY LOGS (Backend) -----------------
-app.get('/api/activities', async (req, res) => {
-  try {
-    const activities = await query('SELECT * FROM user_activities ORDER BY timestamp DESC LIMIT 50');
-    res.json(activities);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/activity', async (req, res) => {
-  try {
-    const { userId, userName, type, description, details } = req.body;
-    await logActivity(userId || null, userName || 'User', type || 'USER_ACTION', description || 'User interaction', details || '');
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Global Error Handler
+app.use(globalErrorHandler);
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server listening on http://localhost:${PORT}`);
+  console.log(`🚀 Enterprise Auth Express Server listening on http://localhost:${PORT}`);
 });

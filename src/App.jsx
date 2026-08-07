@@ -7,18 +7,11 @@ import ExploreView from './views/ExploreView';
 import TravelView from './views/TravelView';
 import ProfileView from './views/ProfileView';
 import AuthGateView from './views/AuthGateView';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-export default function App() {
+function MainAppContent() {
+  const { currentUser, loading, logout, setCurrentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
-  // Load stored user session if available, otherwise null to ask for SignUp/Login first!
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('gim_user_session');
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
-  });
 
   const [rentals, setRentals] = useState([]);
   const [explorePlaces, setExplorePlaces] = useState([]);
@@ -42,15 +35,21 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (currentUser) {
+      fetchData();
+    }
+  }, [currentUser]);
 
-  // Function to log any user action to MySQL database table in the backend
+  // Log user action to backend
   const handleLogAction = async (type, description, details = '') => {
     try {
       await fetch('/api/activity', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || '',
+          'x-user-name': currentUser?.name || 'User'
+        },
         body: JSON.stringify({
           userId: currentUser?.id || null,
           userName: currentUser?.name || 'Guest',
@@ -87,34 +86,29 @@ export default function App() {
     }
   };
 
-  const handleAuthSuccess = (user) => {
-    setCurrentUser(user);
-    try {
-      localStorage.setItem('gim_user_session', JSON.stringify(user));
-    } catch (e) {
-      console.error('Error saving session:', e);
-    }
+  const handleLogout = async () => {
+    await logout();
   };
 
-  const handleLogout = () => {
-    handleLogAction('USER_LOGOUT', `User ${currentUser?.name} logged out`);
-    setCurrentUser(null);
-    try {
-      localStorage.removeItem('gim_user_session');
-    } catch (e) {
-      console.error('Error clearing session:', e);
-    }
-  };
+  // Show loading indicator during silent session restoration
+  if (loading) {
+    return (
+      <div className="w-full min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
+        <div className="w-12 h-12 rounded-full border-4 border-blue-500 border-t-transparent animate-spin mb-4" />
+        <p className="text-xs font-bold tracking-wide text-slate-300">Restoring Secure Auth Session...</p>
+      </div>
+    );
+  }
 
-  // If no user is logged in, show AuthGateView (asking for Sign Up / Login / Google OAuth first!)
+  // Enforce Auth Gate
   if (!currentUser) {
-    return <AuthGateView onAuthSuccess={handleAuthSuccess} />;
+    return <AuthGateView onAuthSuccess={(user) => setCurrentUser(user)} />;
   }
 
   return (
     <div className="w-full min-h-screen bg-slate-50 flex flex-col overflow-x-hidden">
       <div className="app-container w-full min-h-screen flex flex-col">
-        {/* Top Header Bar */}
+        {/* Header */}
         <Header
           currentUser={currentUser}
           onLogout={handleLogout}
@@ -122,7 +116,7 @@ export default function App() {
           setActiveTab={handleTabChange}
         />
 
-        {/* Main View Content */}
+        {/* Main Views */}
         <main className="flex-1 w-full">
           {activeTab === 'home' && (
             <HomeView
@@ -168,9 +162,17 @@ export default function App() {
           )}
         </main>
 
-        {/* Sticky Bottom Navigation Bar (Visible on mobile screens) */}
+        {/* Bottom Nav */}
         <BottomNav activeTab={activeTab} setActiveTab={handleTabChange} />
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainAppContent />
+    </AuthProvider>
   );
 }

@@ -1,0 +1,186 @@
+import {
+  registerEmailUser,
+  loginEmailUser,
+  authenticateGoogleUser,
+  rotateRefreshToken,
+  forgotPassword,
+  resetPassword,
+  changePassword,
+  logoutUser,
+  logoutAllSessions,
+  sanitizeUserDTO
+} from './auth.service.js';
+import { setAuthCookies, clearAuthCookies } from '../../utils/jwt.js';
+import { findUserByUuid } from './auth.repository.js';
+
+export async function handleSignup(req, res, next) {
+  try {
+    const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
+    const { user, accessToken, refreshToken } = await registerEmailUser(req.body, clientInfo);
+
+    setAuthCookies(res, accessToken, refreshToken);
+
+    res.status(201).json({
+      success: true,
+      message: 'Account created successfully',
+      user,
+      accessToken
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleLogin(req, res, next) {
+  try {
+    const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
+    const { user, accessToken, refreshToken } = await loginEmailUser(req.body, clientInfo);
+
+    setAuthCookies(res, accessToken, refreshToken);
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      user,
+      accessToken
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleGoogleAuth(req, res, next) {
+  try {
+    const { credential, idToken } = req.body;
+    const tokenToVerify = credential || idToken;
+
+    if (!tokenToVerify) {
+      return res.status(400).json({ success: false, message: 'Google credential / ID token is required.' });
+    }
+
+    const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
+    const { user, accessToken, refreshToken } = await authenticateGoogleUser(tokenToVerify, clientInfo);
+
+    setAuthCookies(res, accessToken, refreshToken);
+
+    res.json({
+      success: true,
+      message: 'Google authentication successful',
+      user,
+      accessToken
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleRefreshToken(req, res, next) {
+  try {
+    const rawRefreshToken = req.cookies.refresh_token || req.body.refreshToken;
+    if (!rawRefreshToken) {
+      return res.status(401).json({ success: false, message: 'Refresh token missing.' });
+    }
+
+    const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
+    const { accessToken, refreshToken, user } = await rotateRefreshToken(rawRefreshToken, clientInfo);
+
+    setAuthCookies(res, accessToken, refreshToken);
+
+    res.json({
+      success: true,
+      message: 'Token refreshed successfully',
+      user,
+      accessToken
+    });
+  } catch (err) {
+    clearAuthCookies(res);
+    next(err);
+  }
+}
+
+export async function handleForgotPassword(req, res, next) {
+  try {
+    const { email } = req.body;
+    const result = await forgotPassword(email);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleResetPassword(req, res, next) {
+  try {
+    const { token, password } = req.body;
+    const result = await resetPassword(token, password);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleChangePassword(req, res, next) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const result = await changePassword(req.user.uuid, currentPassword, newPassword);
+    clearAuthCookies(res);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleLogout(req, res, next) {
+  try {
+    const rawRefreshToken = req.cookies.refresh_token;
+    await logoutUser(rawRefreshToken);
+    clearAuthCookies(res);
+    res.json({ success: true, message: 'Logged out successfully' });
+  } catch (err) {
+    clearAuthCookies(res);
+    next(err);
+  }
+}
+
+export async function handleLogoutAll(req, res, next) {
+  try {
+    await logoutAllSessions(req.user.id);
+    clearAuthCookies(res);
+    res.json({ success: true, message: 'Logged out from all devices successfully' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleGetMe(req, res, next) {
+  try {
+    res.json({
+      success: true,
+      user: sanitizeUserDTO(req.user)
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleUpdateProfile(req, res, next) {
+  try {
+    const user = await findUserByUuid(req.user.uuid);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const { name, phone, batch, section } = req.body;
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (batch) user.batch = batch;
+    if (section) user.section = section;
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: sanitizeUserDTO(user)
+    });
+  } catch (err) {
+    next(err);
+  }
+}
