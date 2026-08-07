@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ENV } from './config/env.js';
 import { initDatabase, query } from './config/database.js';
 import { logAuditActivity } from './utils/logger.js';
@@ -9,16 +11,19 @@ import authRouter from './modules/auth/auth.routes.js';
 import { globalRateLimiter } from './middleware/rateLimiter.js';
 import { globalErrorHandler } from './middleware/errorHandler.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 const PORT = ENV.PORT || 5000;
 
 // Security Headers & Cookies Middleware
 app.use(helmet({
-  contentSecurityPolicy: false // Allows inline scripts for GIS SDK
+  contentSecurityPolicy: false
 }));
 app.use(cookieParser(ENV.COOKIES.SECRET));
 
-// CORS Configuration (Strict Origins)
+// CORS Configuration
 app.use(cors({
   origin: [ENV.FRONTEND_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'],
   credentials: true,
@@ -28,6 +33,9 @@ app.use(cors({
 
 app.use(express.json());
 app.use(globalRateLimiter);
+
+// Serve static frontend build files if available
+app.use(express.static(path.join(__dirname, '../dist')));
 
 // Middleware for Request Logging
 app.use((req, res, next) => {
@@ -44,12 +52,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize MySQL Database
+// Initialize Database
 initDatabase();
 
 // Mount Authentication & User Routes
 app.use('/api/auth', authRouter);
-app.use('/auth', authRouter); // Backward compatibility
+app.use('/auth', authRouter);
 app.use('/users', authRouter);
 
 // ----------------- RENTALS ROUTES -----------------
@@ -179,6 +187,20 @@ app.post('/api/trips/:id/join', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// Root API Health Endpoint
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'PMGIM Enterprise Auth API Server Active',
+    environment: ENV.NODE_ENV
+  });
+});
+
+// Fallback to index.html for Single-Page Application routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 // Global Error Handler
