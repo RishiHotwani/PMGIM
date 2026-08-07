@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapPin, Star, Heart, Compass, Info } from 'lucide-react';
 import SpotDetailModal from '../components/SpotDetailModal';
 
-export default function ExploreView({ places = [], onLogAction, currentUser }) {
+export default function ExploreView({ places = [], onLogAction, currentUser, onToggleBookmark }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [userBookmarks, setUserBookmarks] = useState({});
@@ -13,7 +13,10 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
   const categories = ['All', ...dynamicCategories];
 
   const fetchUserBookmarks = async () => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) {
+      setUserBookmarks({});
+      return;
+    }
     try {
       const res = await fetch('/api/bookmarks', {
         headers: {
@@ -23,8 +26,11 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
       });
       if (res.ok) {
         const data = await res.json();
+        const bookmarkedSet = new Set(data.map((b) => Number(b.id)));
         const map = {};
-        data.forEach(b => { map[b.id] = true; });
+        places.forEach((p) => {
+          map[p.id] = bookmarkedSet.has(Number(p.id));
+        });
         setUserBookmarks(map);
       }
     } catch (err) {
@@ -34,7 +40,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
 
   useEffect(() => {
     fetchUserBookmarks();
-  }, [currentUser]);
+  }, [currentUser, places]);
 
   const filteredPlaces = places.filter((item) => {
     if (selectedCategory === 'All') return true;
@@ -52,8 +58,14 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
       return;
     }
 
+    const currentVal = !!userBookmarks[spotId];
+    const newVal = !currentVal;
+
+    // Optimistic UI update
+    setUserBookmarks((prev) => ({ ...prev, [spotId]: newVal }));
+    if (onToggleBookmark) onToggleBookmark(spotId);
+
     try {
-      setUserBookmarks(prev => ({ ...prev, [spotId]: !prev[spotId] }));
       await fetch(`/api/bookmarks/${spotId}/toggle`, {
         method: 'POST',
         headers: {
@@ -61,9 +73,10 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
           'x-user-name': currentUser.name || 'User'
         }
       });
-      fetchUserBookmarks();
     } catch (err) {
-      console.error(err);
+      console.error('Bookmark toggle error:', err);
+      // Rollback on error
+      setUserBookmarks((prev) => ({ ...prev, [spotId]: currentVal }));
     }
   };
 
@@ -118,7 +131,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
       {/* Spots Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPlaces.map((item) => {
-          const isBookmarked = currentUser?.id ? (userBookmarks[item.id] !== undefined ? !!userBookmarks[item.id] : Boolean(item.is_bookmarked)) : false;
+          const isBookmarked = currentUser?.id ? !!userBookmarks[item.id] : false;
           return (
             <div
               key={item.id}

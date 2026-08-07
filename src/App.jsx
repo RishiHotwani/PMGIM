@@ -78,7 +78,7 @@ function MainAppContent() {
       setExplorePlaces((prev) =>
         prev.map((p) => (p.id === id ? { ...p, is_bookmarked: !p.is_bookmarked } : p))
       );
-      await fetch(`/api/explore/${id}/bookmark`, {
+      await fetch(`/api/bookmarks/${id}/toggle`, {
         method: 'POST',
         headers: {
           'x-user-id': currentUser?.id || '',
@@ -148,6 +148,7 @@ function MainAppContent() {
               places={explorePlaces}
               onLogAction={handleLogAction}
               currentUser={currentUser}
+              onToggleBookmark={handleToggleBookmark}
             />
           )}
 
