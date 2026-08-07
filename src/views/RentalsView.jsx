@@ -11,11 +11,13 @@ export default function RentalsView({ rentals = [], onLogAction, currentUser }) 
   const categories = ['All', 'Bikes', 'Scooters', 'Cars'];
 
   const filteredRentals = rentals.filter((item) => {
+    const itemCatLower = (item.category || '').toLowerCase();
+    const selCatLower = selectedCategory.toLowerCase();
+
     const matchesCategory =
       selectedCategory === 'All' ||
-      (selectedCategory === 'Bikes' && item.category === 'Bike') ||
-      (selectedCategory === 'Scooters' && item.category === 'Scooter') ||
-      (selectedCategory === 'Cars' && item.category === 'Car');
+      itemCatLower.includes(selCatLower.replace(/s$/, '')) ||
+      selCatLower.includes(itemCatLower);
 
     const matchesSearch =
       item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||

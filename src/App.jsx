@@ -41,9 +41,7 @@ function MainAppContent() {
   };
 
   useEffect(() => {
-    if (currentUser) {
-      fetchData();
-    }
+    fetchData();
   }, [currentUser]);
 
   // Log user action to backend

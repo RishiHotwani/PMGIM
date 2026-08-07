@@ -7,7 +7,10 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [userBookmarks, setUserBookmarks] = useState({});
 
-  const categories = ['All', 'Beaches', 'Waterfalls', 'Food', 'Forts', 'Nightlife'];
+  const dynamicCategories = Array.from(
+    new Set(places.map((p) => p.category).filter(Boolean))
+  );
+  const categories = ['All', ...dynamicCategories];
 
   const fetchUserBookmarks = async () => {
     if (!currentUser?.id) return;
@@ -82,12 +85,12 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
             Explore <span className="text-blue-400">Goa</span> Beyond Campus
           </h1>
           <p className="text-xs text-slate-300 max-w-lg">
-            Discover beaches, waterfalls, food shacks, and historic forts recommended by fellow GIM students.
+            Discover beaches, waterfalls, food shacks, and historic spots recommended by fellow GIM students.
           </p>
         </div>
       </div>
 
-      {/* Category Filter Tabs */}
+      {/* Dynamic Category Filter Tabs */}
       <div className="flex items-center justify-between gap-4 overflow-x-auto pb-2 border-b border-slate-200">
         <div className="flex items-center gap-2">
           {categories.map((cat) => (
@@ -115,7 +118,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
       {/* Spots Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPlaces.map((item) => {
-          const isBookmarked = !!userBookmarks[item.id];
+          const isBookmarked = !!userBookmarks[item.id] || item.is_bookmarked;
           return (
             <div
               key={item.id}
