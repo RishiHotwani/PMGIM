@@ -118,7 +118,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser }) {
       {/* Spots Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPlaces.map((item) => {
-          const isBookmarked = !!userBookmarks[item.id] || item.is_bookmarked;
+          const isBookmarked = currentUser?.id ? (userBookmarks[item.id] !== undefined ? !!userBookmarks[item.id] : Boolean(item.is_bookmarked)) : false;
           return (
             <div
               key={item.id}

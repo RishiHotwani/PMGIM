@@ -14,7 +14,7 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
       iconBg: 'bg-blue-400/30 text-white',
       icon: Bike,
       tab: 'rentals',
-      badge: '7 Vehicles'
+      badge: '4 Vehicles'
     },
     {
       id: 'travel',
@@ -24,7 +24,7 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
       iconBg: 'bg-emerald-400/30 text-white',
       icon: Users,
       tab: 'travel',
-      badge: '4 Active Rides'
+      badge: 'Active Rides'
     },
     {
       id: 'explore',
@@ -34,7 +34,7 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
       iconBg: 'bg-orange-400/30 text-white',
       icon: MapPin,
       tab: 'explore',
-      badge: '8 Top Spots'
+      badge: '10 Top Spots'
     },
     {
       id: 'planner',
