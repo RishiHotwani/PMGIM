@@ -14,7 +14,8 @@ export const memoryStore = {
   travel_trips: [],
   user_activities: [],
   user_notifications: [],
-  user_bookmarks: []
+  user_bookmarks: [],
+  rental_bookings: []
 };
 
 export async function initDatabase() {
@@ -251,6 +252,34 @@ export async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
+    // 11. Rental Bookings Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rental_bookings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        rental_id INT NOT NULL,
+        user_id INT NULL,
+        user_name VARCHAR(255) NOT NULL,
+        user_email VARCHAR(255) NOT NULL,
+        user_phone VARCHAR(50) NOT NULL,
+        vendor_user_id INT NULL,
+        vehicle_title VARCHAR(255) NOT NULL,
+        days INT DEFAULT 1,
+        start_date VARCHAR(50) NOT NULL,
+        daily_rate DECIMAL(10,2) NOT NULL,
+        deposit DECIMAL(10,2) DEFAULT 0.00,
+        service_fee DECIMAL(10,2) DEFAULT 0.00,
+        gst_amount DECIMAL(10,2) DEFAULT 0.00,
+        total_amount DECIMAL(10,2) NOT NULL,
+        razorpay_order_id VARCHAR(255) NULL,
+        razorpay_payment_id VARCHAR(255) NULL,
+        razorpay_signature VARCHAR(255) NULL,
+        status ENUM('PENDING', 'PAID', 'FAILED', 'CANCELLED') DEFAULT 'PENDING',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_rental_id (rental_id)
+      ) ENGINE=InnoDB;
+    `);
+
     isInMemoryFallback = false;
     console.log(`✅ Connected to MySQL database on port ${ENV.DB.PORT}: ${ENV.DB.NAME}`);
 
@@ -268,6 +297,42 @@ export async function query(sql, params = []) {
   }
   
   const lowerSql = sql.toLowerCase();
+
+  if (lowerSql.includes('select * from rental_bookings')) {
+    return memoryStore.rental_bookings.filter(b => b.user_id === params[0]);
+  }
+  if (lowerSql.includes('insert into rental_bookings')) {
+    const bk = {
+      id: memoryStore.rental_bookings.length + 1,
+      rental_id: params[0],
+      user_id: params[1],
+      user_name: params[2],
+      user_email: params[3],
+      user_phone: params[4],
+      vendor_user_id: params[5],
+      vehicle_title: params[6],
+      days: params[7],
+      start_date: params[8],
+      daily_rate: params[9],
+      deposit: params[10],
+      service_fee: params[11],
+      gst_amount: params[12],
+      total_amount: params[13],
+      razorpay_order_id: params[14],
+      status: 'PENDING',
+      created_at: new Date().toISOString()
+    };
+    memoryStore.rental_bookings.push(bk);
+    return { insertId: bk.id };
+  }
+  if (lowerSql.includes('update rental_bookings set status =')) {
+    const b = memoryStore.rental_bookings.find(x => x.razorpay_order_id === params[2] || x.id === params[2]);
+    if (b) {
+      b.status = params[0];
+      b.razorpay_payment_id = params[1];
+    }
+    return { affectedRows: 1 };
+  }
 
   if (lowerSql.includes('select * from user_notifications')) {
     const uid = params[0];

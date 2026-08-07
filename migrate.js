@@ -20,35 +20,38 @@ async function migrate() {
 
     console.log(`Migrating MySQL database tables on ${DB_HOST}:${DB_PORT} / ${DB_NAME}...`);
 
-    // 1. Create user_notifications table
+    // Create rental_bookings table
     await conn.query(`
-      CREATE TABLE IF NOT EXISTS user_notifications (
+      CREATE TABLE IF NOT EXISTS rental_bookings (
         id INT AUTO_INCREMENT PRIMARY KEY,
+        rental_id INT NOT NULL,
         user_id INT NULL,
-        type VARCHAR(50) NOT NULL,
-        title VARCHAR(255) NOT NULL,
-        message TEXT NOT NULL,
-        is_read BOOLEAN DEFAULT FALSE,
+        user_name VARCHAR(255) NOT NULL,
+        user_email VARCHAR(255) NOT NULL,
+        user_phone VARCHAR(50) NOT NULL,
+        vendor_user_id INT NULL,
+        vehicle_title VARCHAR(255) NOT NULL,
+        days INT DEFAULT 1,
+        start_date VARCHAR(50) NOT NULL,
+        daily_rate DECIMAL(10,2) NOT NULL,
+        deposit DECIMAL(10,2) DEFAULT 0.00,
+        service_fee DECIMAL(10,2) DEFAULT 0.00,
+        gst_amount DECIMAL(10,2) DEFAULT 0.00,
+        total_amount DECIMAL(10,2) NOT NULL,
+        razorpay_order_id VARCHAR(255) NULL,
+        razorpay_payment_id VARCHAR(255) NULL,
+        razorpay_signature VARCHAR(255) NULL,
+        status ENUM('PENDING', 'PAID', 'FAILED', 'CANCELLED') DEFAULT 'PENDING',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_user_id (user_id)
+        INDEX idx_user_id (user_id),
+        INDEX idx_rental_id (rental_id)
       ) ENGINE=InnoDB;
     `);
-    console.log('Successfully created user_notifications table');
 
-    // 2. Create user_bookmarks table
-    await conn.query(`
-      CREATE TABLE IF NOT EXISTS user_bookmarks (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        place_id INT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY idx_user_place (user_id, place_id)
-      ) ENGINE=InnoDB;
-    `);
-    console.log('Successfully created user_bookmarks table');
+    console.log('Successfully created rental_bookings table');
 
     await conn.end();
-    console.log('✅ Notification & Bookmark migration complete!');
+    console.log('✅ Rental bookings migration complete!');
   } catch (err) {
     console.error('Migration error:', err);
   }

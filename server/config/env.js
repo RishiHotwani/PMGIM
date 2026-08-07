@@ -31,5 +31,10 @@ export const ENV = {
   GOOGLE: {
     CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '460937107777-5lifbfpuskp3bcfifv00f68bs2qib4k6.apps.googleusercontent.com',
     CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
+  },
+
+  RAZORPAY: {
+    KEY_ID: process.env.RAZORPAY_KEY_ID || 'rzp_test_TN0iCSZQvgpBd8',
+    KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || 'EoASr6T8ZbDb2vjCYZ4PAPo0',
   }
 };

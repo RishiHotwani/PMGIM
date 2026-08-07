@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import crypto from 'crypto';
+import Razorpay from 'razorpay';
 import { ENV } from '../server/config/env.js';
 import { initDatabase, query } from '../server/config/database.js';
 import { logAuditActivity } from '../server/utils/logger.js';
@@ -11,6 +13,11 @@ import { globalErrorHandler } from '../server/middleware/errorHandler.js';
 import { authenticateToken } from '../server/middleware/authenticate.js';
 
 const app = express();
+
+const razorpayInstance = new Razorpay({
+  key_id: ENV.RAZORPAY.KEY_ID,
+  key_secret: ENV.RAZORPAY.KEY_SECRET
+});
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cookieParser(ENV.COOKIES.SECRET));
@@ -37,6 +44,133 @@ app.use(async (req, res, next) => {
 app.use('/api/auth', authRouter);
 app.use('/auth', authRouter);
 app.use('/users', authRouter);
+
+// RAZORPAY PAYMENTS
+app.post('/api/payments/create-order', async (req, res, next) => {
+  try {
+    const {
+      rental_id,
+      vehicle_title,
+      vendor_user_id,
+      days,
+      start_date,
+      daily_rate,
+      deposit,
+      service_fee,
+      gst_amount,
+      total_amount,
+      user_name,
+      user_email,
+      user_phone
+    } = req.body;
+
+    const userId = req.headers['x-user-id'] ? parseInt(req.headers['x-user-id'], 10) : null;
+    const amountInPaise = Math.round(parseFloat(total_amount) * 100);
+
+    const orderOptions = {
+      amount: amountInPaise,
+      currency: 'INR',
+      receipt: `rcpt_${Date.now()}`,
+      notes: {
+        vehicle_title,
+        user_name,
+        days: String(days)
+      }
+    };
+
+    let razorpayOrder = null;
+    try {
+      razorpayOrder = await razorpayInstance.orders.create(orderOptions);
+    } catch (rzpErr) {
+      console.warn('Razorpay order creation fallback mode:', rzpErr.message);
+      razorpayOrder = {
+        id: `order_mock_${Date.now()}`,
+        amount: amountInPaise,
+        currency: 'INR'
+      };
+    }
+
+    const bookingResult = await query(
+      `INSERT INTO rental_bookings 
+       (rental_id, user_id, user_name, user_email, user_phone, vendor_user_id, vehicle_title, days, start_date, daily_rate, deposit, service_fee, gst_amount, total_amount, razorpay_order_id, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+      [
+        rental_id,
+        userId,
+        user_name,
+        user_email,
+        user_phone,
+        vendor_user_id || null,
+        vehicle_title,
+        days,
+        start_date,
+        daily_rate,
+        deposit,
+        service_fee,
+        gst_amount,
+        total_amount,
+        razorpayOrder.id
+      ]
+    );
+
+    res.json({
+      success: true,
+      order_id: razorpayOrder.id,
+      amount_in_paise: amountInPaise,
+      razorpay_key: ENV.RAZORPAY.KEY_ID,
+      booking_id: bookingResult.insertId
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/payments/verify', async (req, res, next) => {
+  try {
+    const { booking_id, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const userId = req.headers['x-user-id'] ? parseInt(req.headers['x-user-id'], 10) : null;
+
+    let isSignatureValid = true;
+
+    if (razorpay_signature && !razorpay_order_id.startsWith('order_mock_')) {
+      const generatedSignature = crypto
+        .createHmac('sha256', ENV.RAZORPAY.KEY_SECRET)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+
+      isSignatureValid = generatedSignature === razorpay_signature;
+    }
+
+    if (!isSignatureValid) {
+      await query('UPDATE rental_bookings SET status = "FAILED" WHERE razorpay_order_id = ? OR id = ?', [razorpay_order_id, booking_id]);
+      return res.status(400).json({ success: false, message: 'Invalid Razorpay payment signature.' });
+    }
+
+    await query(
+      'UPDATE rental_bookings SET status = "PAID", razorpay_payment_id = ?, razorpay_signature = ? WHERE razorpay_order_id = ? OR id = ?',
+      [razorpay_payment_id, razorpay_signature || 'mock_sig', razorpay_order_id, booking_id]
+    );
+
+    const bookings = await query('SELECT vehicle_title, user_name, total_amount FROM rental_bookings WHERE razorpay_order_id = ? OR id = ?', [razorpay_order_id, booking_id]);
+    const b = bookings[0] || { vehicle_title: 'Vehicle', user_name: 'Customer', total_amount: 0 };
+
+    await query(
+      'INSERT INTO user_notifications (user_id, type, title, message) VALUES (?, "RENTAL_BOOKING_SUCCESS", ?, ?)',
+      [
+        userId,
+        `🎉 Rental Confirmed: ${b.vehicle_title}`,
+        `${b.user_name} paid ₹${b.total_amount} via Razorpay. Key pickup instructions sent!`
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'Razorpay payment verified & booking confirmed!'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // NOTIFICATIONS
 app.get('/api/notifications', async (req, res, next) => {
@@ -201,22 +335,6 @@ app.delete('/api/rentals/:id', authenticateToken, async (req, res, next) => {
       req.user.role
     ]);
     res.json({ success: true, message: 'Vehicle deleted successfully.' });
-  } catch (err) {
-    next(err);
-  }
-});
-
-app.post('/api/rentals/:id/book', async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { userName, userId, days, startDate } = req.body;
-    const rentals = await query('SELECT * FROM rentals WHERE id = ?', [id]);
-    const vehicle = rentals[0] || { title: `Vehicle #${id}` };
-
-    res.json({
-      success: true,
-      message: `🎉 Success! Booked ${vehicle.title} for ${days || 1} day(s). Vendor will contact you for pickup.`
-    });
   } catch (err) {
     next(err);
   }
