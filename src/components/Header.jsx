@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, LogOut, Compass, Bike, Users, Home, User, Store, Check, Sparkles, Inbox } from 'lucide-react';
+import UserAvatar from './UserAvatar';
 
 export default function Header({ currentUser, onLogout, activeTab, setActiveTab }) {
   const [notifications, setNotifications] = useState([]);
@@ -183,9 +184,7 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
             className="flex items-center gap-2 p-1 pr-2.5 rounded-2xl bg-white/80 hover:bg-white border border-slate-200/70 shadow-xs backdrop-blur-md transition-all active:scale-95"
             title={`${currentUser?.name} (${currentUser?.role})`}
           >
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-md shadow-blue-500/20">
-              {currentUser?.avatar || 'US'}
-            </div>
+            <UserAvatar user={currentUser} className="w-8 h-8 text-xs" />
             <span className="hidden lg:inline text-xs font-extrabold text-slate-800">
               {firstName}
             </span>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Mail, Bookmark, LogOut, Phone, ShieldCheck } from 'lucide-react';
 import SpotDetailModal from '../components/SpotDetailModal';
+import UserAvatar from '../components/UserAvatar';
 
 export default function ProfileView({ currentUser, onLogout, onLogAction }) {
   const [bookmarks, setBookmarks] = useState([]);
@@ -56,12 +57,11 @@ export default function ProfileView({ currentUser, onLogout, onLogAction }) {
           {/* User Card */}
           <div className="bg-gradient-to-br from-blue-600 via-indigo-700 to-blue-800 text-white rounded-3xl p-6 shadow-xl shadow-blue-500/20 relative overflow-hidden">
             <div className="flex items-center gap-4 z-10 relative">
-              <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md text-white font-black text-2xl flex items-center justify-center border border-white/30 shadow-inner">
-                {currentUser ? currentUser.avatar : 'US'}
-              </div>
-              <div>
-                <h2 className="text-xl font-bold">{currentUser ? currentUser.name : 'Student User'}</h2>
-                <p className="text-xs text-blue-100 mt-0.5">{currentUser ? currentUser.email : 'student@gim.ac.in'}</p>
+              <UserAvatar user={currentUser} className="w-16 h-16 text-2xl" />
+
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xl font-bold truncate">{currentUser ? currentUser.name : 'Student User'}</h2>
+                <p className="text-xs text-blue-100 mt-0.5 truncate">{currentUser ? currentUser.email : 'student@gim.ac.in'}</p>
                 <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-semibold text-white">
                   <span>{currentUser ? (currentUser.role === 'VENDOR' ? 'Rental Vendor' : 'Student') : 'PGDM 2026'}</span>
                 </div>
