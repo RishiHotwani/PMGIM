@@ -212,28 +212,34 @@ app.patch('/api/notifications/read-all', async (req, res, next) => {
 
 app.patch('/api/auth/role', async (req, res, next) => {
   try {
-    const userId = req.headers['x-user-id'] ? parseInt(req.headers['x-user-id'], 10) : (req.user ? req.user.id : null);
+    const rawUserId = req.headers['x-user-id'] || (req.user ? (req.user.id || req.user.uuid || req.user.email) : null);
     const { role } = req.body;
 
-    if (!userId) {
+    if (!rawUserId) {
       return res.status(401).json({ success: false, message: 'Authentication required to update role.' });
     }
 
     const newRole = (role === 'VENDOR' || role === 'ADMIN') ? role : 'USER';
+    const parsedIntId = parseInt(rawUserId, 10);
 
-    await query('UPDATE users SET role = ? WHERE id = ?', [newRole, userId]);
+    if (!isNaN(parsedIntId)) {
+      await query('UPDATE users SET role = ? WHERE id = ?', [newRole, parsedIntId]);
+    } else {
+      await query('UPDATE users SET role = ? WHERE uuid = ? OR email = ?', [newRole, String(rawUserId), String(rawUserId)]);
+    }
 
-    const memUser = memoryStore.users.find(u => u.id === userId);
+    const memUser = memoryStore.users.find(u => u.id === parsedIntId || u.uuid === rawUserId || u.email === rawUserId);
     if (memUser) memUser.role = newRole;
 
     res.json({
       success: true,
       message: `Account role updated to ${newRole}`,
       role: newRole,
-      user: { id: userId, role: newRole }
+      user: { id: rawUserId, role: newRole }
     });
   } catch (err) {
-    next(err);
+    console.error('Role update error:', err);
+    res.status(500).json({ success: false, message: err.message || 'Failed to update role' });
   }
 });
 

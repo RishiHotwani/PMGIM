@@ -435,6 +435,14 @@ export async function query(sql, params = []) {
     return { affectedRows: 1 };
   }
 
+  if (lowerSql.includes('update users set role =')) {
+    const roleVal = params[0];
+    const userVal = params[1];
+    const u = memoryStore.users.find(x => x.id === userVal || x.uuid === userVal || x.email === userVal || Number(x.id) === Number(userVal));
+    if (u) u.role = roleVal;
+    return { affectedRows: 1 };
+  }
+
   if (lowerSql.includes('select * from user_bookmarks')) {
     const uid = Number(params[0]);
     const pid = params[1] ? Number(params[1]) : null;
