@@ -296,7 +296,21 @@ app.get('/api/rentals', async (req, res, next) => {
       params = [category];
     }
 
-    const rentals = await query(sql, params);
+    let rentals = await query(sql, params);
+
+    // Merge memoryStore.rentals to ensure vendor-added vehicles are instantly visible for all users
+    if (memoryStore && memoryStore.rentals && memoryStore.rentals.length > 0) {
+      const existingIds = new Set(rentals.map(r => r.id));
+      for (const memR of memoryStore.rentals) {
+        if (!existingIds.has(memR.id)) {
+          if (!category || category === 'All' || memR.category === category) {
+            rentals.unshift(memR);
+            existingIds.add(memR.id);
+          }
+        }
+      }
+    }
+
     res.json(rentals);
   } catch (err) {
     next(err);
@@ -306,7 +320,19 @@ app.get('/api/rentals', async (req, res, next) => {
 app.get('/api/rentals/vendor', authenticateToken, async (req, res, next) => {
   try {
     const vendorUserId = req.user.id;
-    const myFleet = await query('SELECT * FROM rentals WHERE vendor_user_id = ? ORDER BY id DESC', [vendorUserId]);
+    let myFleet = await query('SELECT * FROM rentals WHERE vendor_user_id = ? ORDER BY id DESC', [vendorUserId]);
+
+    if (memoryStore && memoryStore.rentals) {
+      const memFleet = memoryStore.rentals.filter(r => String(r.vendor_user_id) === String(vendorUserId));
+      const existingIds = new Set(myFleet.map(f => f.id));
+      for (const mf of memFleet) {
+        if (!existingIds.has(mf.id)) {
+          myFleet.unshift(mf);
+          existingIds.add(mf.id);
+        }
+      }
+    }
+
     res.json(myFleet);
   } catch (err) {
     next(err);
@@ -348,6 +374,32 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
       ]
     );
 
+    const newRentalItem = {
+      id: result.insertId || (memoryStore.rentals.length + 1),
+      vendor_user_id: req.user.id,
+      title,
+      vendor: vendorName,
+      category: validCategory,
+      price_per_day: parseInt(price_per_day, 10),
+      rating: 5.0,
+      total_ratings: 1,
+      distance: '0.5 km away',
+      fuel: fuel || 'Petrol',
+      transmission: transmission || 'Automatic',
+      tags: tags || 'Verified Vendor',
+      image: defaultImage,
+      description: description || `${title} available for campus and Goa trip rentals.`,
+      location: location || 'Sanquelim / GIM Gate',
+      is_available: true,
+      created_at: new Date().toISOString()
+    };
+
+    if (memoryStore && memoryStore.rentals) {
+      if (!memoryStore.rentals.some(r => r.id === newRentalItem.id)) {
+        memoryStore.rentals.unshift(newRentalItem);
+      }
+    }
+
     await query(
       'INSERT INTO user_notifications (user_id, type, title, message) VALUES (NULL, "VENDOR_POST_VEHICLE", ?, ?)',
       [`🛵 New ${validCategory} Listed: ${title}`, `${vendorName} posted ${title} for ₹${price_per_day}/day.`]
@@ -363,8 +415,8 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: `${title} posted successfully!`,
-      id: result.insertId
+      message: `Vehicle "${title}" listed successfully!`,
+      rentalId: result.insertId || newRentalItem.id
     });
   } catch (err) {
     next(err);
