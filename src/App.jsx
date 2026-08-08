@@ -8,6 +8,7 @@ import TravelView from './views/TravelView';
 import ProfileView from './views/ProfileView';
 import AuthGateView from './views/AuthGateView';
 import VendorPortalView from './views/VendorPortalView';
+import AdminAnalyticsView from './views/AdminAnalyticsView';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 function MainAppContent() {
@@ -160,6 +161,10 @@ function MainAppContent() {
               currentUser={currentUser}
               onRefreshRentals={fetchData}
             />
+          )}
+
+          {activeTab === 'analytics' && (
+            <AdminAnalyticsView />
           )}
 
           {activeTab === 'explore' && (

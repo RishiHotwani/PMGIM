@@ -12,6 +12,7 @@ export const memoryStore = {
   explore_places: [],
   place_reviews: [],
   travel_trips: [],
+  trip_participants: [],
   user_activities: [],
   user_notifications: [],
   user_bookmarks: [],
@@ -59,7 +60,7 @@ export async function initDatabase() {
       password: ENV.DB.PASSWORD,
       database: ENV.DB.NAME,
       waitForConnections: true,
-      connectionLimit: 20,
+      connectionLimit: 25,
       queueLimit: 0
     });
 
@@ -86,8 +87,8 @@ export async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
-    // Ensure missing columns exist in pre-existing tables
-    const alterColumns = [
+    // Column updates for Users
+    const userAlterations = [
       "ADD COLUMN uuid VARCHAR(36) NULL",
       "ADD COLUMN google_id VARCHAR(255) NULL",
       "ADD COLUMN provider ENUM('EMAIL', 'GOOGLE') NOT NULL DEFAULT 'EMAIL'",
@@ -99,11 +100,8 @@ export async function initDatabase() {
       "ADD COLUMN last_login TIMESTAMP NULL DEFAULT NULL",
       "ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"
     ];
-
-    for (const colDef of alterColumns) {
-      try {
-        await pool.query(`ALTER TABLE users ${colDef};`);
-      } catch (e) {}
+    for (const colDef of userAlterations) {
+      try { await pool.query(`ALTER TABLE users ${colDef};`); } catch (e) {}
     }
 
     // 2. Refresh Tokens Table
@@ -136,21 +134,7 @@ export async function initDatabase() {
       ) ENGINE=InnoDB;
     `);
 
-    // 4. Activity Logs Table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_activities (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT DEFAULT NULL,
-        user_name VARCHAR(255) DEFAULT 'Guest',
-        activity_type VARCHAR(100) NOT NULL,
-        description TEXT NOT NULL,
-        details TEXT,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        ip_address VARCHAR(100) DEFAULT '127.0.0.1'
-      ) ENGINE=InnoDB;
-    `);
-
-    // 5. Rentals Table
+    // 4. Rentals Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS rentals (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -169,13 +153,75 @@ export async function initDatabase() {
         description TEXT NULL,
         location VARCHAR(255) DEFAULT 'Sanquelim / Campus',
         is_available BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        status ENUM('ACTIVE', 'MAINTENANCE', 'DELETED') NOT NULL DEFAULT 'ACTIVE',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP NULL DEFAULT NULL,
+        INDEX idx_vendor_user (vendor_user_id),
+        INDEX idx_category (category),
+        INDEX idx_is_available (is_available),
+        INDEX idx_status (status)
       ) ENGINE=InnoDB;
     `);
 
-    try {
-      await pool.query("ALTER TABLE rentals MODIFY COLUMN vendor_user_id VARCHAR(255) NULL;");
-    } catch (e) {}
+    const rentalAlterations = [
+      "MODIFY COLUMN vendor_user_id VARCHAR(255) NULL",
+      "ADD COLUMN status ENUM('ACTIVE', 'MAINTENANCE', 'DELETED') NOT NULL DEFAULT 'ACTIVE'",
+      "ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+      "ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"
+    ];
+    for (const colDef of rentalAlterations) {
+      try { await pool.query(`ALTER TABLE rentals ${colDef};`); } catch (e) {}
+    }
+
+    // 5. Rental Bookings Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rental_bookings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        rental_id INT NOT NULL,
+        user_id VARCHAR(255) NULL,
+        user_name VARCHAR(255) NOT NULL,
+        user_email VARCHAR(255) NOT NULL,
+        user_phone VARCHAR(50) NOT NULL,
+        vendor_user_id VARCHAR(255) NULL,
+        vehicle_title VARCHAR(255) NOT NULL,
+        start_date VARCHAR(50) NOT NULL,
+        end_date VARCHAR(50) NULL,
+        number_of_days INT DEFAULT 1,
+        daily_rate DECIMAL(10,2) NOT NULL,
+        rental_amount DECIMAL(10,2) DEFAULT 0.00,
+        security_deposit DECIMAL(10,2) DEFAULT 0.00,
+        service_fee DECIMAL(10,2) DEFAULT 0.00,
+        gst_amount DECIMAL(10,2) DEFAULT 0.00,
+        total_amount DECIMAL(10,2) NOT NULL,
+        payment_status ENUM('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'REFUNDED') DEFAULT 'PENDING',
+        booking_status ENUM('PENDING_PAYMENT', 'CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING_PAYMENT',
+        razorpay_order_id VARCHAR(255) NULL,
+        razorpay_payment_id VARCHAR(255) NULL,
+        razorpay_signature VARCHAR(255) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_rental_id (rental_id),
+        INDEX idx_vendor_user (vendor_user_id),
+        INDEX idx_booking_status (booking_status),
+        INDEX idx_payment_status (payment_status)
+      ) ENGINE=InnoDB;
+    `);
+
+    const bookingAlterations = [
+      "MODIFY COLUMN vendor_user_id VARCHAR(255) NULL",
+      "MODIFY COLUMN user_id VARCHAR(255) NULL",
+      "ADD COLUMN end_date VARCHAR(50) NULL",
+      "ADD COLUMN number_of_days INT DEFAULT 1",
+      "ADD COLUMN rental_amount DECIMAL(10,2) DEFAULT 0.00",
+      "ADD COLUMN payment_status ENUM('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'REFUNDED') DEFAULT 'PENDING'",
+      "ADD COLUMN booking_status ENUM('PENDING_PAYMENT', 'CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING_PAYMENT'",
+      "ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    ];
+    for (const colDef of bookingAlterations) {
+      try { await pool.query(`ALTER TABLE rental_bookings ${colDef};`); } catch (e) {}
+    }
 
     // 6. Explore Places Table
     await pool.query(`
@@ -192,97 +238,187 @@ export async function initDatabase() {
         maps_url VARCHAR(500) NULL,
         best_time VARCHAR(255) DEFAULT '5:00 PM – 7:00 PM (Sunset)',
         est_cost VARCHAR(100) DEFAULT '₹400 / person',
-        pro_tips TEXT NULL
+        pro_tips TEXT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB;
     `);
 
-    // 7. Place Reviews & Ratings Table
+    const exploreAlterations = [
+      "ADD COLUMN is_active BOOLEAN DEFAULT TRUE",
+      "ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    ];
+    for (const colDef of exploreAlterations) {
+      try { await pool.query(`ALTER TABLE explore_places ${colDef};`); } catch (e) {}
+    }
+
+    // 7. User Private Bookmarks Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_bookmarks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        place_id INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY idx_user_place (user_id, place_id),
+        INDEX idx_user (user_id)
+      ) ENGINE=InnoDB;
+    `);
+
+    const bookmarkAlterations = [
+      "MODIFY COLUMN user_id VARCHAR(255) NOT NULL"
+    ];
+    for (const colDef of bookmarkAlterations) {
+      try { await pool.query(`ALTER TABLE user_bookmarks ${colDef};`); } catch (e) {}
+    }
+
+    // 8. Place Reviews & Ratings Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS place_reviews (
         id INT AUTO_INCREMENT PRIMARY KEY,
         place_id INT NOT NULL,
-        user_id INT NULL,
+        user_id VARCHAR(255) NULL,
         user_name VARCHAR(255) NOT NULL,
         user_avatar VARCHAR(10) DEFAULT 'US',
         rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
         comment TEXT NOT NULL,
+        is_deleted BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_place_id (place_id)
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_place_id (place_id),
+        INDEX idx_user_id (user_id)
       ) ENGINE=InnoDB;
     `);
 
-    // 8. Travel Trips Table
+    const reviewAlterations = [
+      "MODIFY COLUMN user_id VARCHAR(255) NULL",
+      "ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE",
+      "ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    ];
+    for (const colDef of reviewAlterations) {
+      try { await pool.query(`ALTER TABLE place_reviews ${colDef};`); } catch (e) {}
+    }
+
+    // 9. Travel Trips Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS travel_trips (
         id INT AUTO_INCREMENT PRIMARY KEY,
+        host_user_id VARCHAR(255) NULL,
         user_name VARCHAR(255) NOT NULL,
         user_initials VARCHAR(10) NOT NULL,
         batch_info VARCHAR(100) NOT NULL,
         title VARCHAR(255) NOT NULL,
+        destination VARCHAR(255) NULL,
         pickup VARCHAR(255) NOT NULL,
         date_time VARCHAR(255) NOT NULL,
+        departure_date VARCHAR(50) NULL,
+        departure_time VARCHAR(50) NULL,
         seats_left INT NOT NULL,
         seats_total INT NOT NULL,
         vehicle_type VARCHAR(50) NOT NULL,
         cost VARCHAR(50) NOT NULL,
         description TEXT,
-        status VARCHAR(50) DEFAULT 'Today',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        status VARCHAR(50) DEFAULT 'ACTIVE',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_destination (destination),
+        INDEX idx_status (status),
+        INDEX idx_departure_date (departure_date)
       ) ENGINE=InnoDB;
     `);
 
-    // 9. User Notifications Table
+    const tripAlterations = [
+      "ADD COLUMN host_user_id VARCHAR(255) NULL",
+      "ADD COLUMN destination VARCHAR(255) NULL",
+      "ADD COLUMN departure_date VARCHAR(50) NULL",
+      "ADD COLUMN departure_time VARCHAR(50) NULL",
+      "ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+    ];
+    for (const colDef of tripAlterations) {
+      try { await pool.query(`ALTER TABLE travel_trips ${colDef};`); } catch (e) {}
+    }
+
+    // 10. Trip Participants Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trip_participants (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        trip_id INT NOT NULL,
+        user_id VARCHAR(255) NOT NULL,
+        user_name VARCHAR(255) DEFAULT 'Student',
+        seats_joined INT DEFAULT 1,
+        status ENUM('JOINED', 'LEFT', 'CANCELLED') DEFAULT 'JOINED',
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY idx_trip_user (trip_id, user_id),
+        INDEX idx_trip_id (trip_id),
+        INDEX idx_user_id (user_id)
+      ) ENGINE=InnoDB;
+    `);
+
+    // 11. User Notifications Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS user_notifications (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NULL,
+        user_id VARCHAR(255) NULL,
         type VARCHAR(50) NOT NULL,
         title VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
+        entity_type VARCHAR(100) NULL,
+        entity_id VARCHAR(255) NULL,
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_user_id (user_id)
       ) ENGINE=InnoDB;
     `);
 
-    // 10. User Private Bookmarks Table
+    const notifAlterations = [
+      "MODIFY COLUMN user_id VARCHAR(255) NULL",
+      "ADD COLUMN entity_type VARCHAR(100) NULL",
+      "ADD COLUMN entity_id VARCHAR(255) NULL"
+    ];
+    for (const colDef of notifAlterations) {
+      try { await pool.query(`ALTER TABLE user_notifications ${colDef};`); } catch (e) {}
+    }
+
+    // 12. User Activities / Product Analytics Table
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_bookmarks (
+      CREATE TABLE IF NOT EXISTS user_activities (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        place_id INT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY idx_user_place (user_id, place_id)
+        user_id VARCHAR(255) NULL,
+        session_id VARCHAR(255) NULL,
+        user_name VARCHAR(255) DEFAULT 'Guest',
+        activity_type VARCHAR(100) NOT NULL,
+        event_name VARCHAR(100) NULL,
+        event_category VARCHAR(100) NULL,
+        entity_type VARCHAR(100) NULL,
+        entity_id VARCHAR(255) NULL,
+        page VARCHAR(255) NULL,
+        description TEXT NOT NULL,
+        details TEXT,
+        metadata JSON NULL,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ip_address VARCHAR(100) DEFAULT '127.0.0.1',
+        INDEX idx_user (user_id),
+        INDEX idx_session (session_id),
+        INDEX idx_event (event_name),
+        INDEX idx_category (event_category),
+        INDEX idx_time (timestamp)
       ) ENGINE=InnoDB;
     `);
 
-    // 11. Rental Bookings Table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS rental_bookings (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        rental_id INT NOT NULL,
-        user_id INT NULL,
-        user_name VARCHAR(255) NOT NULL,
-        user_email VARCHAR(255) NOT NULL,
-        user_phone VARCHAR(50) NOT NULL,
-        vendor_user_id INT NULL,
-        vehicle_title VARCHAR(255) NOT NULL,
-        days INT DEFAULT 1,
-        start_date VARCHAR(50) NOT NULL,
-        daily_rate DECIMAL(10,2) NOT NULL,
-        deposit DECIMAL(10,2) DEFAULT 0.00,
-        service_fee DECIMAL(10,2) DEFAULT 0.00,
-        gst_amount DECIMAL(10,2) DEFAULT 0.00,
-        total_amount DECIMAL(10,2) NOT NULL,
-        razorpay_order_id VARCHAR(255) NULL,
-        razorpay_payment_id VARCHAR(255) NULL,
-        razorpay_signature VARCHAR(255) NULL,
-        status ENUM('PENDING', 'PAID', 'FAILED', 'CANCELLED') DEFAULT 'PENDING',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_user_id (user_id),
-        INDEX idx_rental_id (rental_id)
-      ) ENGINE=InnoDB;
-    `);
+    const activityAlterations = [
+      "MODIFY COLUMN user_id VARCHAR(255) NULL",
+      "ADD COLUMN session_id VARCHAR(255) NULL",
+      "ADD COLUMN event_name VARCHAR(100) NULL",
+      "ADD COLUMN event_category VARCHAR(100) NULL",
+      "ADD COLUMN entity_type VARCHAR(100) NULL",
+      "ADD COLUMN entity_id VARCHAR(255) NULL",
+      "ADD COLUMN page VARCHAR(255) NULL",
+      "ADD COLUMN metadata JSON NULL"
+    ];
+    for (const colDef of activityAlterations) {
+      try { await pool.query(`ALTER TABLE user_activities ${colDef};`); } catch (e) {}
+    }
 
     isInMemoryFallback = false;
     console.log(`✅ Connected to MySQL database on port ${ENV.DB.PORT}: ${ENV.DB.NAME}`);
@@ -301,13 +437,13 @@ async function seedInitialData() {
     const [rentalsRows] = await pool.query('SELECT COUNT(*) as count FROM rentals');
     if (rentalsRows[0].count === 0) {
       const rentals = [
-        [null, 'Honda Activa 6G', 'Coastal Rides Sanquelim', 'Scooter', 350, 4.8, 132, '1.2 km away', 'Petrol', 'Automatic', 'Women friendly', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Reliable 110cc automatic scooter for smooth campus commute.', 'Sanquelim Gate', true],
-        [null, 'Royal Enfield Hunter 350', 'Goa Bike Rentals', 'Bike', 750, 4.9, 88, '0.8 km away', 'Petrol', 'Manual', 'Popular choice', 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', 'Cruiser bike ideal for North Goa beach road trips.', 'Mapusa Road', true],
-        [null, 'Maruti Suzuki Swift', 'Sanq Cabs & Self Drive', 'Car', 1800, 4.7, 54, '2.0 km away', 'Petrol', 'Manual', 'AC Hatchback', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', '5-seater AC hatchback with unlimited kilometers.', 'Thivim Station', true],
-        [null, 'TVS Jupiter 125', 'Campus Wheels', 'Scooter', 320, 4.6, 95, '0.5 km away', 'Petrol', 'Automatic', 'Budget friendly', 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', 'Economical 125cc scooter with spacious under-seat storage.', 'GIM Hostels', true]
+        [null, 'Honda Activa 6G', 'Coastal Rides Sanquelim', 'Scooter', 350, 4.8, 132, '1.2 km away', 'Petrol', 'Automatic', 'Women friendly', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Reliable 110cc automatic scooter for smooth campus commute.', 'Sanquelim Gate', true, 'ACTIVE'],
+        [null, 'Royal Enfield Hunter 350', 'Goa Bike Rentals', 'Bike', 750, 4.9, 88, '0.8 km away', 'Petrol', 'Manual', 'Popular choice', 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', 'Cruiser bike ideal for North Goa beach road trips.', 'Mapusa Road', true, 'ACTIVE'],
+        [null, 'Maruti Suzuki Swift', 'Sanq Cabs & Self Drive', 'Car', 1800, 4.7, 54, '2.0 km away', 'Petrol', 'Manual', 'AC Hatchback', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', '5-seater AC hatchback with unlimited kilometers.', 'Thivim Station', true, 'ACTIVE'],
+        [null, 'TVS Jupiter 125', 'Campus Wheels', 'Scooter', 320, 4.6, 95, '0.5 km away', 'Petrol', 'Automatic', 'Budget friendly', 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', 'Economical 125cc scooter with spacious under-seat storage.', 'GIM Hostels', true, 'ACTIVE']
       ];
       for (const r of rentals) {
-        await pool.query('INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', r);
+        await pool.query('INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', r);
       }
     }
 
@@ -333,10 +469,10 @@ async function seedInitialData() {
     const [tripsRows] = await pool.query('SELECT COUNT(*) as count FROM travel_trips');
     if (tripsRows[0].count === 0) {
       const trips = [
-        ['Rahul Verma', 'RV', 'PGDM 2026', 'Airport Share (Goa MOPA to GIM Campus)', 'MOPA Airport Terminal', 'Today 6:00 PM', 2, 4, 'Cab', '₹450 each', 'Flight arrives 5:30 PM. 2 seats free for GIM students.', 'Today']
+        [null, 'Rahul Verma', 'RV', 'PGDM 2026', 'Airport Share (Goa MOPA to GIM Campus)', 'MOPA Airport Terminal', 'MOPA Airport', 'Today 6:00 PM', '2026-08-08', '18:00', 2, 4, 'Cab', '₹450 each', 'Flight arrives 5:30 PM. 2 seats free for GIM students.', 'ACTIVE']
       ];
       for (const t of trips) {
-        await pool.query('INSERT INTO travel_trips (user_name, user_initials, batch_info, title, pickup, date_time, seats_left, seats_total, vehicle_type, cost, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', t);
+        await pool.query('INSERT INTO travel_trips (host_user_id, user_name, user_initials, batch_info, title, pickup, destination, date_time, departure_date, departure_time, seats_left, seats_total, vehicle_type, cost, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', t);
       }
     }
   } catch (err) {
@@ -346,10 +482,10 @@ async function seedInitialData() {
 
 function seedMemoryData() {
   memoryStore.rentals = [
-    { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'Campus scooter.', location: 'Sanquelim' },
-    { id: 2, title: 'Royal Enfield Hunter 350', vendor: 'Goa Bike Rentals', category: 'Bike', price_per_day: 750, rating: 4.9, total_ratings: 88, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Popular choice', image: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'Cruiser bike.', location: 'Mapusa' },
-    { id: 3, title: 'Maruti Suzuki Swift', vendor: 'Sanq Cabs & Self Drive', category: 'Car', price_per_day: 1800, rating: 4.7, total_ratings: 54, distance: '2.0 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'AC Hatchback', image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', is_available: true, description: '5-seater AC hatchback.', location: 'Thivim' },
-    { id: 4, title: 'TVS Jupiter 125', vendor: 'Campus Wheels', category: 'Scooter', price_per_day: 320, rating: 4.6, total_ratings: 95, distance: '0.5 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Budget friendly', image: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', is_available: true, description: 'Economical 125cc scooter.', location: 'GIM Hostels' }
+    { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true, status: 'ACTIVE', description: 'Campus scooter.', location: 'Sanquelim' },
+    { id: 2, title: 'Royal Enfield Hunter 350', vendor: 'Goa Bike Rentals', category: 'Bike', price_per_day: 750, rating: 4.9, total_ratings: 88, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Popular choice', image: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', is_available: true, status: 'ACTIVE', description: 'Cruiser bike.', location: 'Mapusa' },
+    { id: 3, title: 'Maruti Suzuki Swift', vendor: 'Sanq Cabs & Self Drive', category: 'Car', price_per_day: 1800, rating: 4.7, total_ratings: 54, distance: '2.0 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'AC Hatchback', image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', is_available: true, status: 'ACTIVE', description: '5-seater AC hatchback.', location: 'Thivim' },
+    { id: 4, title: 'TVS Jupiter 125', vendor: 'Campus Wheels', category: 'Scooter', price_per_day: 320, rating: 4.6, total_ratings: 95, distance: '0.5 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Budget friendly', image: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', is_available: true, status: 'ACTIVE', description: 'Economical 125cc scooter.', location: 'GIM Hostels' }
   ];
 
   memoryStore.explore_places = [
@@ -369,8 +505,26 @@ function seedMemoryData() {
     { id: 1, place_id: 1, user_name: 'Rishi Hotwani', user_avatar: 'RH', rating: 5, comment: 'Amazing sunset spot!', created_at: new Date().toISOString() }
   ];
   memoryStore.travel_trips = [
-    { id: 1, user_name: 'Rahul Verma', user_initials: 'RV', batch_info: 'PGDM 2026', title: 'Airport Share (Goa MOPA to GIM Campus)', pickup: 'MOPA Airport Terminal', date_time: 'Today 6:00 PM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹450 each', description: 'Flight arrives 5:30 PM. 2 seats free for GIM students.', status: 'Today' }
+    { id: 1, user_name: 'Rahul Verma', user_initials: 'RV', batch_info: 'PGDM 2026', title: 'Airport Share (Goa MOPA to GIM Campus)', pickup: 'MOPA Airport Terminal', date_time: 'Today 6:00 PM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹450 each', description: 'Flight arrives 5:30 PM. 2 seats free for GIM students.', status: 'ACTIVE' }
   ];
+}
+
+export async function withTransaction(callback) {
+  if (isInMemoryFallback || !pool) {
+    return callback(null);
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const result = await callback(conn);
+    await conn.commit();
+    return result;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 export async function query(sql, params = []) {
@@ -382,7 +536,7 @@ export async function query(sql, params = []) {
   const lowerSql = sql.toLowerCase();
 
   if (lowerSql.includes('select * from rental_bookings')) {
-    return memoryStore.rental_bookings.filter(b => b.user_id === params[0]);
+    return memoryStore.rental_bookings.filter(b => String(b.user_id) === String(params[0]) || String(b.vendor_user_id) === String(params[0]));
   }
   if (lowerSql.includes('insert into rental_bookings')) {
     const bk = {
@@ -403,23 +557,27 @@ export async function query(sql, params = []) {
       total_amount: params[13],
       razorpay_order_id: params[14],
       status: 'PENDING',
+      booking_status: 'PENDING_PAYMENT',
+      payment_status: 'PENDING',
       created_at: new Date().toISOString()
     };
     memoryStore.rental_bookings.push(bk);
     return { insertId: bk.id };
   }
-  if (lowerSql.includes('update rental_bookings set status =')) {
-    const b = memoryStore.rental_bookings.find(x => x.razorpay_order_id === params[2] || x.id === params[2]);
+  if (lowerSql.includes('update rental_bookings set status =') || lowerSql.includes('update rental_bookings set booking_status =')) {
+    const b = memoryStore.rental_bookings.find(x => x.razorpay_order_id === params[2] || String(x.id) === String(params[2]));
     if (b) {
       b.status = params[0];
-      b.razorpay_payment_id = params[1];
+      b.booking_status = params[0] === 'PAID' ? 'CONFIRMED' : params[0];
+      b.payment_status = params[0];
+      if (params[1]) b.razorpay_payment_id = params[1];
     }
     return { affectedRows: 1 };
   }
 
   if (lowerSql.includes('select * from user_notifications')) {
     const uid = params[0];
-    return memoryStore.user_notifications.filter(n => n.user_id === uid || n.user_id === null);
+    return memoryStore.user_notifications.filter(n => String(n.user_id) === String(uid) || n.user_id === null);
   }
   if (lowerSql.includes('insert into user_notifications')) {
     const notif = {
@@ -448,18 +606,22 @@ export async function query(sql, params = []) {
   }
 
   if (lowerSql.includes('select * from user_bookmarks')) {
-    const uid = Number(params[0]);
+    const uid = String(params[0]);
     const pid = params[1] ? Number(params[1]) : null;
-    return memoryStore.user_bookmarks.filter(b => Number(b.user_id) === uid && (!pid || Number(b.place_id) === pid));
+    return memoryStore.user_bookmarks.filter(b => String(b.user_id) === uid && (!pid || Number(b.place_id) === pid));
   }
   if (lowerSql.includes('insert into user_bookmarks')) {
-    memoryStore.user_bookmarks.push({ user_id: Number(params[0]), place_id: Number(params[1]), created_at: new Date().toISOString() });
+    const uid = String(params[0]);
+    const pid = Number(params[1]);
+    if (!memoryStore.user_bookmarks.some(b => String(b.user_id) === uid && Number(b.place_id) === pid)) {
+      memoryStore.user_bookmarks.push({ id: memoryStore.user_bookmarks.length + 1, user_id: uid, place_id: pid, created_at: new Date().toISOString() });
+    }
     return { insertId: 1 };
   }
   if (lowerSql.includes('delete from user_bookmarks')) {
-    const uid = Number(params[0]);
+    const uid = String(params[0]);
     const pid = Number(params[1]);
-    memoryStore.user_bookmarks = memoryStore.user_bookmarks.filter(b => !(Number(b.user_id) === uid && Number(b.place_id) === pid));
+    memoryStore.user_bookmarks = memoryStore.user_bookmarks.filter(b => !(String(b.user_id) === uid && Number(b.place_id) === pid));
     return { affectedRows: 1 };
   }
 
@@ -470,7 +632,7 @@ export async function query(sql, params = []) {
     const newRev = {
       id: memoryStore.place_reviews.length + 1,
       place_id: Number(params[0]),
-      user_id: params[1] ? Number(params[1]) : null,
+      user_id: params[1] ? String(params[1]) : null,
       user_name: params[2],
       user_avatar: params[3] || 'US',
       rating: Number(params[4]),
@@ -481,14 +643,14 @@ export async function query(sql, params = []) {
     return { insertId: newRev.id };
   }
   if (lowerSql.includes('inner join user_bookmarks')) {
-    const uid = Number(params[0]);
-    const bookmarkedIds = new Set(memoryStore.user_bookmarks.filter(b => Number(b.user_id) === uid).map(b => Number(b.place_id)));
+    const uid = String(params[0]);
+    const bookmarkedIds = new Set(memoryStore.user_bookmarks.filter(b => String(b.user_id) === uid).map(b => Number(b.place_id)));
     return memoryStore.explore_places.filter(p => bookmarkedIds.has(Number(p.id)));
   }
   if (lowerSql.includes('from explore_places')) {
-    const uid = params[0] ? Number(params[0]) : null;
+    const uid = params[0] ? String(params[0]) : null;
     const bookmarkedSet = new Set(
-      uid ? memoryStore.user_bookmarks.filter(b => Number(b.user_id) === uid).map(b => Number(b.place_id)) : []
+      uid ? memoryStore.user_bookmarks.filter(b => String(b.user_id) === uid).map(b => Number(b.place_id)) : []
     );
     return memoryStore.explore_places.map(p => ({
       ...p,
@@ -498,7 +660,7 @@ export async function query(sql, params = []) {
   if (lowerSql.includes('insert into rentals')) {
     const newRental = {
       id: memoryStore.rentals.length + 1,
-      vendor_user_id: params[0],
+      vendor_user_id: String(params[0]),
       title: params[1],
       vendor: params[2],
       category: params[3],
@@ -513,6 +675,7 @@ export async function query(sql, params = []) {
       description: params[9] || '',
       location: params[10] || 'Sanquelim / Campus Gate',
       is_available: true,
+      status: 'ACTIVE',
       created_at: new Date().toISOString()
     };
     memoryStore.rentals.unshift(newRental);
@@ -520,8 +683,8 @@ export async function query(sql, params = []) {
   }
 
   if (lowerSql.includes('where vendor_user_id')) {
-    const vid = params[0];
-    return memoryStore.rentals.filter(r => String(r.vendor_user_id) === String(vid) || !r.vendor_user_id);
+    const vid = String(params[0]);
+    return memoryStore.rentals.filter(r => String(r.vendor_user_id) === vid && r.status !== 'DELETED');
   }
 
   if (lowerSql.includes('update rentals set is_available')) {
@@ -531,14 +694,18 @@ export async function query(sql, params = []) {
     return { affectedRows: 1 };
   }
 
-  if (lowerSql.includes('delete from rentals')) {
+  if (lowerSql.includes('delete from rentals') || lowerSql.includes('update rentals set status = \'deleted\'')) {
     const rid = Number(params[0]);
-    memoryStore.rentals = memoryStore.rentals.filter(r => Number(r.id) !== rid);
+    const item = memoryStore.rentals.find(r => Number(r.id) === rid);
+    if (item) {
+      item.status = 'DELETED';
+      item.is_available = false;
+    }
     return { affectedRows: 1 };
   }
 
-  if (lowerSql.includes('from rentals')) return memoryStore.rentals;
-  if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips;
+  if (lowerSql.includes('from rentals')) return memoryStore.rentals.filter(r => r.status !== 'DELETED');
+  if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips.filter(t => t.status !== 'CANCELLED');
 
   return [];
 }

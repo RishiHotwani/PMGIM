@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, LogOut, Compass, Bike, Users, Home, User, Store, Check, Sparkles, Inbox } from 'lucide-react';
+import { Bell, LogOut, Compass, Bike, Users, Home, User, Store, Check, Sparkles, Inbox, BarChart3 } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
 export default function Header({ currentUser, onLogout, activeTab, setActiveTab }) {
   const [notifications, setNotifications] = useState([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
 
-  const isVendor = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN';
+  const isVendor = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'rentals', label: 'Rentals', icon: Bike },
     ...(isVendor ? [{ id: 'vendor_portal', label: 'Vendor Portal', icon: Store }] : []),
+    ...(isVendor ? [{ id: 'analytics', label: 'Analytics', icon: BarChart3 }] : []),
     { id: 'explore', label: 'Explore Goa', icon: Compass },
     { id: 'travel', label: 'Travel Board', icon: Users },
     { id: 'profile', label: 'Profile', icon: User },
