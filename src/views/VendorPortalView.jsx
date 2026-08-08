@@ -21,7 +21,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
   });
 
   const getAuthHeaders = () => ({
-    'x-user-id': currentUser?.id || '',
+    'x-user-id': currentUser?.id || currentUser?.uuid || '',
     'x-user-name': currentUser?.name || 'Vendor'
   });
 
@@ -61,6 +61,11 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to post vehicle');
+
+      const createdObj = data.rental || data.data;
+      if (createdObj) {
+        setFleet((prev) => [createdObj, ...prev.filter((p) => p.id !== createdObj.id)]);
+      }
 
       setMsg(data.message);
       setShowAddModal(false);

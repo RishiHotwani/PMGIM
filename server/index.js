@@ -136,14 +136,22 @@ app.get('/api/rentals', async (req, res, next) => {
 
 app.get('/api/rentals/vendor', authenticateToken, async (req, res, next) => {
   try {
-    const vendorUserId = String(req.user.id);
-    const vendorUuid = req.user.uuid ? String(req.user.uuid) : vendorUserId;
+    const rawHeaderId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
+    const userIdStr = String(req.user?.id || '');
+    const userUuidStr = String(req.user?.uuid || '');
+    const userEmailStr = String(req.user?.email || '');
+
+    console.log('[RENTAL_VENDOR_FETCH]', { userIdStr, userUuidStr, rawHeaderId, userEmailStr });
 
     const myFleet = await query(
-      "SELECT * FROM rentals WHERE (vendor_user_id = ? OR vendor_user_id = ?) AND status != 'DELETED' ORDER BY id DESC",
-      [vendorUserId, vendorUuid]
+      `SELECT * FROM rentals 
+       WHERE (vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id IS NULL) 
+         AND status != 'DELETED' 
+       ORDER BY id DESC`,
+      [userIdStr, userUuidStr, rawHeaderId, userEmailStr]
     );
 
+    console.log('[RENTAL_VENDOR_FETCH_RESULT]', { count: myFleet.length });
     res.json(myFleet);
   } catch (err) {
     next(err);
@@ -165,7 +173,10 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
     const validCategory = ['Car', 'Bike', 'Scooter'].includes(category) ? category : 'Bike';
     const vendorName = req.user.name || 'Campus Vendor';
     const defaultImage = image || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80';
-    const vendorUserIdStr = String(req.user.id);
+    const rawHeaderId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
+    const vendorUserIdStr = String(req.user?.id || req.user?.uuid || rawHeaderId || '1');
+
+    console.log('[RENTAL_CREATE_REQUEST]', { vendorUserIdStr, user: req.user, body: req.body });
 
     const result = await query(
       `INSERT INTO rentals 
@@ -186,6 +197,30 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
       ]
     );
 
+    const newId = result.insertId;
+    const createdRows = await query('SELECT * FROM rentals WHERE id = ?', [newId]);
+    const createdVehicle = createdRows[0] || {
+      id: newId,
+      vendor_user_id: vendorUserIdStr,
+      title,
+      vendor: vendorName,
+      category: validCategory,
+      price_per_day: parseInt(price_per_day, 10),
+      rating: 5.0,
+      total_ratings: 1,
+      distance: '0.5 km away',
+      fuel: fuel || 'Petrol',
+      transmission: transmission || 'Automatic',
+      tags: tags || 'Verified Vendor',
+      image: defaultImage,
+      description: description || `${title} available for campus and Goa trip rentals.`,
+      location: location || 'Sanquelim / GIM Gate',
+      is_available: true,
+      status: 'ACTIVE'
+    };
+
+    console.log('[RENTAL_CREATE_DB_SUCCESS]', { insertId: newId, vehicle: createdVehicle });
+
     await query(
       'INSERT INTO user_notifications (user_id, type, title, message) VALUES (NULL, "VENDOR_POST_VEHICLE", ?, ?)',
       [`🛵 New ${validCategory} Listed: ${title}`, `${vendorName} posted ${title} for ₹${price_per_day}/day.`]
@@ -202,7 +237,9 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
     res.status(201).json({
       success: true,
       message: `Vehicle "${title}" listed successfully!`,
-      rentalId: result.insertId
+      rentalId: newId,
+      rental: createdVehicle,
+      data: createdVehicle
     });
   } catch (err) {
     next(err);

@@ -13,7 +13,7 @@ export async function authenticateToken(req, res, next) {
 
     if (token) {
       const payload = verifyAccessToken(token);
-      if (payload) {
+      if (payload && payload.sub) {
         const user = await findUserByUuid(payload.sub);
         if (user && user.is_active) {
           req.user = user;
@@ -24,9 +24,16 @@ export async function authenticateToken(req, res, next) {
 
     // Session / Header Fallback for authenticated active sessions
     if (req.headers['x-user-id']) {
-      const uid = parseInt(req.headers['x-user-id'], 10);
+      const rawHeaderId = String(req.headers['x-user-id']).trim();
+      const parsedInt = parseInt(rawHeaderId, 10);
       const uname = req.headers['x-user-name'] || 'Vendor';
-      req.user = { id: uid, name: uname, role: 'VENDOR' };
+
+      req.user = {
+        id: !isNaN(parsedInt) ? parsedInt : rawHeaderId,
+        uuid: rawHeaderId,
+        name: uname,
+        role: 'VENDOR'
+      };
       return next();
     }
 
@@ -35,6 +42,7 @@ export async function authenticateToken(req, res, next) {
       message: 'Authentication required. Access token missing.'
     });
   } catch (err) {
+    console.error('Authentication middleware error:', err);
     return res.status(500).json({
       success: false,
       message: 'Authentication processing error.'
