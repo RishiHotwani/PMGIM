@@ -16,12 +16,14 @@ function MainAppContent() {
   const [activeTab, setActiveTab] = useState('home');
 
   const [rentals, setRentals] = useState([]);
+  const [rentalsLoading, setRentalsLoading] = useState(true);
   const [explorePlaces, setExplorePlaces] = useState([]);
   const [travelTrips, setTravelTrips] = useState([]);
 
   // Fetch initial data
   const fetchData = async () => {
     try {
+      setRentalsLoading(true);
       const [rRes, eRes, tRes] = await Promise.all([
         fetch('/api/rentals'),
         fetch('/api/explore', {
@@ -38,6 +40,8 @@ function MainAppContent() {
       if (tRes.ok) setTravelTrips(await tRes.json());
     } catch (err) {
       console.error('API fetch error:', err);
+    } finally {
+      setRentalsLoading(false);
     }
   };
 
@@ -150,8 +154,10 @@ function MainAppContent() {
           {activeTab === 'rentals' && (
             <RentalsView
               rentals={rentals}
+              loading={rentalsLoading}
               onLogAction={handleLogAction}
               currentUser={currentUser}
+              onRefresh={fetchData}
               onRefreshRentals={fetchData}
             />
           )}

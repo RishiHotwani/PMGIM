@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Bike, Car, Shield, Trash2, CheckCircle2, XCircle, DollarSign, MapPin, Tag } from 'lucide-react';
+import { PlusCircle, Bike, Car, Shield, Trash2, CheckCircle2, XCircle, DollarSign, MapPin, Tag, Loader2, AlertTriangle } from 'lucide-react';
 
 export default function VendorPortalView({ currentUser, onRefreshRentals }) {
   const [fleet, setFleet] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  
+  // Explicit Vehicle Saving State Machine: idle | saving | verifying | success | error
+  const [vehicleSaveStatus, setVehicleSaveStatus] = useState('idle');
+  const [saveErrorMessage, setSaveErrorMessage] = useState('');
   const [msg, setMsg] = useState('');
 
   const [formData, setFormData] = useState({
@@ -45,12 +48,67 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
     fetchMyFleet();
   }, [currentUser]);
 
+  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Verification Step 1: Verify in Vendor Fleet Listing
+  const verifyVehicleInVendorListings = async (createdVehicleId) => {
+    const delays = [0, 500, 1000, 1500];
+    for (let i = 0; i < delays.length; i++) {
+      if (delays[i] > 0) await delay(delays[i]);
+      try {
+        console.log(`[VEHICLE_VENDOR_FETCH] Attempt ${i + 1} for ID ${createdVehicleId}`);
+        const res = await fetch('/api/rentals/vendor', { headers: getAuthHeaders() });
+        if (res.ok) {
+          const list = await res.json();
+          const match = list.some((v) => String(v.id) === String(createdVehicleId));
+          if (match) {
+            console.log(`[VEHICLE_FRONTEND_VERIFY] Found in vendor listings on attempt ${i + 1}`);
+            setFleet(list); // Update authoritative state directly from verified database query
+            return true;
+          }
+        }
+      } catch (err) {
+        console.warn(`Vendor listing verify error attempt ${i + 1}:`, err);
+      }
+    }
+    return false;
+  };
+
+  // Verification Step 2: Verify in Public Rentals Catalog
+  const verifyVehicleInPublicRentals = async (createdVehicleId) => {
+    const delays = [0, 500, 1000, 1500];
+    for (let i = 0; i < delays.length; i++) {
+      if (delays[i] > 0) await delay(delays[i]);
+      try {
+        console.log(`[VEHICLE_PUBLIC_FETCH] Attempt ${i + 1} for ID ${createdVehicleId}`);
+        const res = await fetch('/api/rentals');
+        if (res.ok) {
+          const list = await res.json();
+          const match = list.some((v) => String(v.id) === String(createdVehicleId));
+          if (match) {
+            console.log(`[VEHICLE_PUBLIC_FETCH_RESULT] Found in public rentals on attempt ${i + 1}`);
+            return true;
+          }
+        }
+      } catch (err) {
+        console.warn(`Public rental verify error attempt ${i + 1}:`, err);
+      }
+    }
+    return false;
+  };
+
   const handlePostVehicle = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
+    if (vehicleSaveStatus === 'saving' || vehicleSaveStatus === 'verifying') return;
+
+    setVehicleSaveStatus('saving');
+    setSaveErrorMessage('');
     setMsg('');
 
+    console.log('[VEHICLE_CREATE_START]', formData);
+
     try {
+      // STEP 1: POST TO BACKEND AND WAIT FOR MYSQL COMMIT
       const res = await fetch('/api/rentals', {
         method: 'POST',
         headers: {
@@ -59,16 +117,45 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
         },
         body: JSON.stringify(formData)
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to post vehicle');
 
-      const createdObj = data.rental || data.data;
-      if (createdObj) {
-        setFleet((prev) => [createdObj, ...prev.filter((p) => p.id !== createdObj.id)]);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        const errorMsg = data.message || data.error?.message || 'Failed to save vehicle on server.';
+        throw new Error(errorMsg);
       }
 
-      setMsg(data.message);
+      const createdVehicle = data.rental || data.data;
+      if (!createdVehicle || !createdVehicle.id) {
+        throw new Error('Server returned invalid vehicle payload without database ID.');
+      }
+
+      console.log('[VEHICLE_CREATE_AUTH_SUCCESS]', { createdVehicleId: createdVehicle.id });
+
+      // STEP 2: VERIFY VENDOR DATABASE RECORD
+      setVehicleSaveStatus('verifying');
+
+      const vendorVerified = await verifyVehicleInVendorListings(createdVehicle.id);
+      if (!vendorVerified) {
+        throw new Error('Vehicle saved, but could not be verified in your vendor fleet listing after 4 retries.');
+      }
+
+      // STEP 3: VERIFY PUBLIC RENTAL RECORD
+      const publicVerified = await verifyVehicleInPublicRentals(createdVehicle.id);
+      if (!publicVerified) {
+        throw new Error('Vehicle saved, but could not be verified in public rentals catalog after 4 retries.');
+      }
+
+      // STEP 4: REFRESH AUTHORITATIVE DATA FOR PUBLIC VIEWS
+      console.log('[VEHICLE_FINAL_SUCCESS]', { createdVehicleId: createdVehicle.id });
+      if (onRefreshRentals) await onRefreshRentals();
+
+      // STEP 5: SUCCESS STATE & CLOSE MODAL ONLY AFTER CONFIRMATION
+      setVehicleSaveStatus('success');
+      setMsg(`Vehicle "${createdVehicle.title}" successfully verified in database and published for all users!`);
+
+      await delay(1200);
       setShowAddModal(false);
+      setVehicleSaveStatus('idle');
       setFormData({
         title: '',
         category: 'Bike',
@@ -80,12 +167,10 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
         description: '',
         location: 'Sanquelim / Campus Gate'
       });
-      fetchMyFleet();
-      if (onRefreshRentals) onRefreshRentals();
     } catch (err) {
-      alert(err.message);
-    } finally {
-      setSubmitting(false);
+      console.error('[VEHICLE_CREATE_ERROR]', err);
+      setVehicleSaveStatus('error');
+      setSaveErrorMessage(err.message || 'Vehicle could not be safely saved. Please try again.');
     }
   };
 
@@ -116,6 +201,8 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
     }
   };
 
+  const isModalBusy = vehicleSaveStatus === 'saving' || vehicleSaveStatus === 'verifying';
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8 animate-fadeIn">
       {/* Vendor Header */}
@@ -134,7 +221,11 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setVehicleSaveStatus('idle');
+            setSaveErrorMessage('');
+            setShowAddModal(true);
+          }}
           className="py-3 px-6 bg-blue-600 hover:bg-blue-500 font-extrabold text-xs rounded-2xl shadow-lg shadow-blue-500/30 flex items-center gap-2 transition-all transform hover:-translate-y-0.5"
         >
           <PlusCircle className="w-4 h-4" />
@@ -153,111 +244,117 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Active Fleet</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">{fleet.length} Vehicles</h3>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Vehicles</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{fleet.length}</p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-            <Bike className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Available for Rent</p>
-            <h3 className="text-2xl font-black text-emerald-600 mt-1">
-              {fleet.filter(f => f.is_available).length} Live
-            </h3>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <CheckCircle2 className="w-6 h-6" />
+          <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+            <Car className="w-5 h-5" />
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Avg Daily Rate</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">
-              ₹{fleet.length ? Math.round(fleet.reduce((acc, curr) => acc + curr.price_per_day, 0) / fleet.length) : 0}/day
-            </h3>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Available Now</p>
+            <p className="text-2xl font-black text-emerald-600 mt-1">
+              {fleet.filter((v) => v.is_available).length}
+            </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-            <DollarSign className="w-6 h-6" />
+          <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Currently Rented</p>
+            <p className="text-2xl font-black text-amber-600 mt-1">
+              {fleet.filter((v) => !v.is_available).length}
+            </p>
+          </div>
+          <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
+            <XCircle className="w-5 h-5" />
           </div>
         </div>
       </div>
 
-      {/* Fleet Listings Table / Grid */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-black text-slate-900">Your Posted Vehicles</h2>
+      {/* Fleet Listings Table */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-md p-6 space-y-4">
+        <h2 className="text-lg font-black text-slate-900">Your Vehicle Listings</h2>
 
         {loading ? (
-          <div className="py-12 text-center text-xs text-slate-400 font-bold">Loading your vehicle fleet...</div>
+          <div className="py-12 text-center text-slate-400 text-xs font-semibold flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+            <span>Loading your vehicles from MySQL database...</span>
+          </div>
         ) : fleet.length === 0 ? (
-          <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center space-y-4">
-            <div className="w-14 h-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-              <Car className="w-7 h-7" />
-            </div>
-            <h3 className="font-extrabold text-slate-800 text-base">No vehicles listed yet</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              You have not posted any rental vehicles yet. Click "Add New Vehicle" to list your Cars, Bikes, or Scooters.
-            </p>
+          <div className="py-12 text-center text-slate-400 text-xs space-y-3">
+            <p>You haven't listed any vehicles yet.</p>
             <button
-              onClick={() => setShowAddModal(true)}
-              className="py-3 px-6 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-md inline-flex items-center gap-2"
+              onClick={() => {
+                setVehicleSaveStatus('idle');
+                setSaveErrorMessage('');
+                setShowAddModal(true);
+              }}
+              className="py-2.5 px-4 bg-blue-600 text-white font-extrabold rounded-xl hover:bg-blue-500 transition-colors"
             >
-              <PlusCircle className="w-4 h-4" />
-              <span>Post Your First Vehicle</span>
+              Add Your First Vehicle
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {fleet.map((item) => (
-              <div key={item.id} className="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-md flex flex-col justify-between">
-                <div>
-                  <div className="relative h-44 w-full bg-slate-100">
-                    <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
-                    <span className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[11px] font-extrabold shadow-sm ${
-                      item.is_available ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-200'
-                    }`}>
+              <div
+                key={item.id}
+                className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex items-start gap-4 hover:shadow-md transition-shadow"
+              >
+                <img
+                  src={item.image}
+                  alt={item.title}
+                  className="w-24 h-24 rounded-xl object-cover border border-slate-200"
+                />
+
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-blue-600 uppercase tracking-wider">{item.category}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        item.is_available ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                      }`}
+                    >
                       {item.is_available ? 'Available' : 'Rented Out'}
                     </span>
-                    <span className="absolute top-3 left-3 px-3 py-1 rounded-full text-[11px] font-extrabold bg-blue-600 text-white shadow-sm">
-                      {item.category}
-                    </span>
                   </div>
 
-                  <div className="p-5 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-extrabold text-slate-900 text-base">{item.title}</h3>
-                      <span className="font-black text-blue-600 text-base">₹{item.price_per_day}<span className="text-xs font-normal text-slate-400">/day</span></span>
-                    </div>
+                  <h3 className="font-extrabold text-sm text-slate-900">{item.title}</h3>
 
-                    <p className="text-xs text-slate-500 line-clamp-2">{item.description}</p>
+                  <div className="text-xs font-extrabold text-slate-700">₹{item.price_per_day} / day</div>
 
-                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 pt-1">
-                      <span className="px-2.5 py-1 bg-slate-100 rounded-lg">{item.fuel}</span>
-                      <span className="px-2.5 py-1 bg-slate-100 rounded-lg">{item.transmission}</span>
-                    </div>
+                  <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-1">
+                    <span>{item.fuel}</span>
+                    <span>•</span>
+                    <span>{item.transmission}</span>
                   </div>
-                </div>
 
-                <div className="p-5 pt-0 flex items-center justify-between border-t border-slate-100 mt-4">
-                  <button
-                    onClick={() => handleToggle(item.id)}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${
-                      item.is_available ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                    }`}
-                  >
-                    {item.is_available ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                    <span>{item.is_available ? 'Mark Rented' : 'Mark Available'}</span>
-                  </button>
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      onClick={() => handleToggle(item.id)}
+                      className={`py-1.5 px-3 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-colors ${
+                        item.is_available
+                          ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      }`}
+                    >
+                      {item.is_available ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      <span>{item.is_available ? 'Mark Rented' : 'Mark Available'}</span>
+                    </button>
 
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -271,109 +368,173 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-extrabold text-base text-slate-900">Post New Vehicle Listing</h3>
-              <button onClick={() => setShowAddModal(false)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100">
+              <button
+                disabled={isModalBusy}
+                onClick={() => !isModalBusy && setShowAddModal(false)}
+                className={`p-1 rounded-full text-slate-400 hover:bg-slate-100 ${isModalBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handlePostVehicle} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Vehicle Name / Model</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Royal Enfield Classic 350 / Honda City"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="Bike">Bike (Cruiser/Sports)</option>
-                    <option value="Scooter">Scooter (Automatic)</option>
-                    <option value="Car">Car (Sedan/Hatchback/SUV)</option>
-                  </select>
+            {/* ERROR ALERT DISPLAY */}
+            {vehicleSaveStatus === 'error' && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold space-y-1 animate-fadeIn">
+                <div className="flex items-center gap-2 text-red-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>Vehicle Verification Failed</span>
                 </div>
+                <p className="text-[11px] text-red-600 font-medium">{saveErrorMessage}</p>
+              </div>
+            )}
 
+            {/* SAVING STATE UI */}
+            {vehicleSaveStatus === 'saving' && (
+              <div className="py-12 flex flex-col items-center justify-center space-y-4 text-center animate-fadeIn">
+                <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+                <h4 className="text-base font-extrabold text-slate-900">Saving Vehicle</h4>
+                <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                  Saving your vehicle to the server... Please wait while we securely save your vehicle listing.
+                </p>
+              </div>
+            )}
+
+            {/* VERIFYING STATE UI */}
+            {vehicleSaveStatus === 'verifying' && (
+              <div className="py-12 flex flex-col items-center justify-center space-y-4 text-center animate-fadeIn">
+                <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+                <h4 className="text-base font-extrabold text-slate-900">Verifying Vehicle</h4>
+                <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                  Vehicle saved successfully. Verifying that it is now available to users across vendor fleet & public catalog...
+                </p>
+              </div>
+            )}
+
+            {/* SUCCESS STATE UI */}
+            {vehicleSaveStatus === 'success' && (
+              <div className="py-12 flex flex-col items-center justify-center space-y-4 text-center animate-fadeIn">
+                <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <h4 className="text-base font-extrabold text-slate-900">Vehicle Verified & Published!</h4>
+                <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                  Vehicle confirmed in MySQL database and is now live for all users.
+                </p>
+              </div>
+            )}
+
+            {/* FORM DISPLAY (idle or error state) */}
+            {(vehicleSaveStatus === 'idle' || vehicleSaveStatus === 'error') && (
+              <form onSubmit={handlePostVehicle} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Daily Price (₹)</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Vehicle Name / Model</label>
                   <input
-                    type="number"
+                    type="text"
                     required
-                    placeholder="450"
-                    value={formData.price_per_day}
-                    onChange={(e) => setFormData({ ...formData, price_per_day: e.target.value })}
+                    placeholder="e.g. Royal Enfield Classic 350 / Honda City"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Fuel Type</label>
-                  <select
-                    value={formData.fuel}
-                    onChange={(e) => setFormData({ ...formData, fuel: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900"
-                  >
-                    <option value="Petrol">Petrol</option>
-                    <option value="EV Electric">EV Electric</option>
-                    <option value="Diesel">Diesel</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="Bike">Bike (Cruiser/Sports)</option>
+                      <option value="Scooter">Scooter (Automatic)</option>
+                      <option value="Car">Car (Sedan/Hatchback/SUV)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Daily Price (₹)</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="450"
+                      value={formData.price_per_day}
+                      onChange={(e) => setFormData({ ...formData, price_per_day: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Fuel Type</label>
+                    <select
+                      value={formData.fuel}
+                      onChange={(e) => setFormData({ ...formData, fuel: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900"
+                    >
+                      <option value="Petrol">Petrol</option>
+                      <option value="EV Electric">EV Electric</option>
+                      <option value="Diesel">Diesel</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Transmission</label>
+                    <select
+                      value={formData.transmission}
+                      onChange={(e) => setFormData({ ...formData, transmission: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900"
+                    >
+                      <option value="Automatic">Automatic</option>
+                      <option value="Manual">Manual</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Transmission</label>
-                  <select
-                    value={formData.transmission}
-                    onChange={(e) => setFormData({ ...formData, transmission: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900"
-                  >
-                    <option value="Automatic">Automatic</option>
-                    <option value="Manual">Manual</option>
-                  </select>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Image URL</label>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://images.unsplash.com/..."
+                    value={formData.image}
+                    onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Image URL</label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://images.unsplash.com/..."
-                  value={formData.image}
-                  onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Vehicle Description & Pickup Rules</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Well maintained 125cc scooter. Helmet included. Pickup at Sanquelim gate."
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Vehicle Description & Pickup Rules</label>
-                <textarea
-                  rows={3}
-                  placeholder="Well maintained 125cc scooter. Helmet included. Pickup at Sanquelim gate."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={isModalBusy}
+                    onClick={() => setShowAddModal(false)}
+                    className="w-1/3 py-3.5 bg-slate-100 text-slate-700 font-extrabold text-xs rounded-xl hover:bg-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3.5 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-colors"
-              >
-                {submitting ? 'Posting Vehicle...' : 'Publish Vehicle Listing'}
-              </button>
-            </form>
+                  <button
+                    type="submit"
+                    disabled={isModalBusy}
+                    className="w-2/3 py-3.5 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <span>Publish Vehicle Listing</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

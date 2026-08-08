@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Bike, Shield, Clock, Star, MapPin, Search, Info, Fuel, Gauge, Car, X } from 'lucide-react';
 import BookingCheckoutModal from '../components/BookingCheckoutModal';
 
-export default function RentalsView({ rentals = [], onLogAction, currentUser }) {
+export default function RentalsView({ rentals = [], loading = false, onLogAction, currentUser, onRefresh }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState(null);
@@ -20,8 +20,8 @@ export default function RentalsView({ rentals = [], onLogAction, currentUser }) 
       selCatLower.includes(itemCatLower);
 
     const matchesSearch =
-      item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.vendor.toLowerCase().includes(searchTerm.toLowerCase());
+      (item.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.vendor || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     return matchesCategory && matchesSearch;
   });
@@ -91,8 +91,27 @@ export default function RentalsView({ rentals = [], onLogAction, currentUser }) 
       </div>
 
       {/* Fleet Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredRentals.map((item) => (
+      {loading ? (
+        <div className="py-16 text-center text-slate-400 text-xs font-semibold flex flex-col items-center justify-center space-y-3">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600 font-extrabold">Loading verified vehicles from MySQL database...</p>
+        </div>
+      ) : filteredRentals.length === 0 ? (
+        <div className="py-16 bg-white rounded-3xl border border-slate-100 p-8 text-center text-slate-500 space-y-3">
+          <p className="text-sm font-extrabold text-slate-700">No vehicles currently match your filter.</p>
+          <p className="text-xs text-slate-400">Try selecting "All" or clearing your search term.</p>
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              className="py-2 px-4 bg-blue-600 text-white font-extrabold text-xs rounded-xl hover:bg-blue-500 transition-colors"
+            >
+              Refresh Rentals
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredRentals.map((item) => (
           <div
             key={item.id}
             className="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between group"
@@ -159,6 +178,7 @@ export default function RentalsView({ rentals = [], onLogAction, currentUser }) 
           </div>
         ))}
       </div>
+      )}
 
       {/* Vehicle Specs Modal */}
       {selectedVehicle && (

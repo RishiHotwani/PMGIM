@@ -176,7 +176,7 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
     const rawHeaderId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
     const vendorUserIdStr = String(req.user?.id || req.user?.uuid || rawHeaderId || '1');
 
-    console.log('[RENTAL_CREATE_REQUEST]', { vendorUserIdStr, user: req.user, body: req.body });
+    console.log('[VEHICLE_CREATE_START]', { vendorUserIdStr, user: req.user, title });
 
     const result = await query(
       `INSERT INTO rentals 
@@ -198,28 +198,25 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
     );
 
     const newId = result.insertId;
-    const createdRows = await query('SELECT * FROM rentals WHERE id = ?', [newId]);
-    const createdVehicle = createdRows[0] || {
-      id: newId,
-      vendor_user_id: vendorUserIdStr,
-      title,
-      vendor: vendorName,
-      category: validCategory,
-      price_per_day: parseInt(price_per_day, 10),
-      rating: 5.0,
-      total_ratings: 1,
-      distance: '0.5 km away',
-      fuel: fuel || 'Petrol',
-      transmission: transmission || 'Automatic',
-      tags: tags || 'Verified Vendor',
-      image: defaultImage,
-      description: description || `${title} available for campus and Goa trip rentals.`,
-      location: location || 'Sanquelim / GIM Gate',
-      is_available: true,
-      status: 'ACTIVE'
-    };
+    console.log('[VEHICLE_CREATE_DB_ID]', { insertId: newId });
 
-    console.log('[RENTAL_CREATE_DB_SUCCESS]', { insertId: newId, vehicle: createdVehicle });
+    // IMMEDIATE BACKEND PERSISTENCE VERIFICATION
+    console.log('[VEHICLE_CREATE_VERIFY_DB]', { insertId: newId });
+    const createdRows = await query("SELECT * FROM rentals WHERE id = ? AND status != 'DELETED'", [newId]);
+
+    if (!createdRows || createdRows.length === 0) {
+      console.error('[VEHICLE_CREATE_ERROR]', { code: 'PERSISTENCE_VERIFICATION_FAILED', insertId: newId });
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'PERSISTENCE_VERIFICATION_FAILED',
+          message: 'Vehicle could not be verified in database after saving.'
+        }
+      });
+    }
+
+    const createdVehicle = createdRows[0];
+    console.log('[VEHICLE_CREATE_VERIFY_SUCCESS]', { insertId: newId, vehicle: createdVehicle });
 
     await query(
       'INSERT INTO user_notifications (user_id, type, title, message) VALUES (NULL, "VENDOR_POST_VEHICLE", ?, ?)',
