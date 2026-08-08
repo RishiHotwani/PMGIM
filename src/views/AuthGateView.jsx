@@ -66,7 +66,7 @@ export default function AuthGateView({ onAuthSuccess }) {
     setError('');
 
     try {
-      const data = await loginWithGoogleToken(response.credential);
+      const data = await loginWithGoogleToken(response.credential, userRole);
       if (onAuthSuccess) onAuthSuccess(data.user);
     } catch (err) {
       setError(err.message || 'Google Authentication verification failed');

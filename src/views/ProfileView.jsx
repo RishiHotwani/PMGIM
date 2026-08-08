@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Bookmark, LogOut, Phone, ShieldCheck } from 'lucide-react';
+import { User, Mail, Bookmark, LogOut, Phone, ShieldCheck, Store, Sparkles, CheckCircle2 } from 'lucide-react';
 import SpotDetailModal from '../components/SpotDetailModal';
 import UserAvatar from '../components/UserAvatar';
+import { useAuth } from '../context/AuthContext';
 
 export default function ProfileView({ currentUser, onLogout, onLogAction, places = [] }) {
+  const { updateUserRole } = useAuth();
   const [bookmarks, setBookmarks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSpot, setSelectedSpot] = useState(null);
+  const [updatingRole, setUpdatingRole] = useState(false);
+  const [roleMsg, setRoleMsg] = useState('');
+
+  const isVendorRole = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
   // Sync bookmarks from places prop (real-time single source of truth)
   useEffect(() => {
@@ -43,6 +49,29 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
     }
   }, [currentUser]);
 
+  const handleToggleRole = async () => {
+    const targetRole = isVendorRole ? 'USER' : 'VENDOR';
+    setUpdatingRole(true);
+    setRoleMsg('');
+    try {
+      if (updateUserRole) {
+        await updateUserRole(targetRole);
+        setRoleMsg(
+          targetRole === 'VENDOR'
+            ? '🚗 Vendor Access Unlocked! You can now post and manage vehicles in Rentals & Vendor Portal.'
+            : '🎓 Switched back to Student Mode.'
+        );
+        if (onLogAction) {
+          onLogAction('SWITCH_ROLE', `User updated role to: ${targetRole}`);
+        }
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to update account role.');
+    } finally {
+      setUpdatingRole(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-12 py-6 space-y-6 pb-24 animate-fadeIn">
       {/* Header */}
@@ -61,8 +90,18 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
         </button>
       </div>
 
+      {roleMsg && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-700 text-xs font-bold flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{roleMsg}</span>
+          </div>
+          <button onClick={() => setRoleMsg('')} className="text-emerald-700 font-extrabold text-sm ml-2">✕</button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: User Profile Card */}
+        {/* Left Column: User Profile Card & Role Switcher */}
         <div className="space-y-6 lg:col-span-1">
           {/* User Card */}
           <div className="bg-gradient-to-br from-blue-600 via-indigo-700 to-blue-800 text-white rounded-3xl p-6 shadow-xl shadow-blue-500/20 relative overflow-hidden">
@@ -71,11 +110,44 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
               <div>
                 <h2 className="text-lg font-black">{currentUser?.name || 'GIM Student'}</h2>
                 <p className="text-xs text-blue-100 font-medium">{currentUser?.email}</p>
-                <span className="inline-block px-2.5 py-0.5 mt-2 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-extrabold tracking-wide">
+                <span className={`inline-block px-2.5 py-0.5 mt-2 backdrop-blur-md rounded-full text-[10px] font-extrabold tracking-wide ${isVendorRole ? 'bg-emerald-400 text-slate-950' : 'bg-white/20 text-white'}`}>
                   {currentUser?.role || 'Student'}
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Role Upgrade & Mode Switcher */}
+          <div className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-md space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                <Store className="w-4 h-4 text-blue-600" />
+                Account Role Mode
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${isVendorRole ? 'bg-emerald-500 text-white' : 'bg-blue-600 text-white'}`}>
+                {currentUser?.role || 'USER'}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+              {isVendorRole 
+                ? '✅ Vendor Mode Active: You can now post vehicles in Rentals & access the Vendor Portal.'
+                : '💡 Student Mode Active: Upgrade to Vendor Mode to list scooters, bikes, and cars for campus rentals.'}
+            </p>
+
+            <button
+              type="button"
+              onClick={handleToggleRole}
+              disabled={updatingRole}
+              className={`w-full py-3 px-4 rounded-2xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 ${
+                isVendorRole
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200'
+                  : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-md shadow-emerald-500/20'
+              }`}
+            >
+              <Store className="w-4 h-4" />
+              <span>{updatingRole ? 'Updating Role...' : isVendorRole ? 'Switch Back to Student Mode' : '⚡ Upgrade to Vehicle Vendor (List Rentals)'}</span>
+            </button>
           </div>
 
           {/* Details Card */}

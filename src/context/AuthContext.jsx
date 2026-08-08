@@ -62,15 +62,30 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const loginWithGoogleToken = async (credentialToken) => {
+  const loginWithGoogleToken = async (credentialToken, desiredRole = 'USER') => {
     const res = await fetch('/api/auth/google', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: credentialToken })
+      body: JSON.stringify({ credential: credentialToken, role: desiredRole })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Google authentication failed');
     setCurrentUser(data.user);
+    return data;
+  };
+
+  const updateUserRole = async (newRole) => {
+    const res = await fetch('/api/auth/role', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': currentUser?.id || ''
+      },
+      body: JSON.stringify({ role: newRole })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to update role');
+    setCurrentUser((prev) => (prev ? { ...prev, role: newRole } : null));
     return data;
   };
 
@@ -114,6 +129,7 @@ export function AuthProvider({ children }) {
         login,
         signup,
         loginWithGoogleToken,
+        updateUserRole,
         logout,
         forgotPassword,
         resetPassword,

@@ -196,6 +196,33 @@ app.patch('/api/notifications/read-all', async (req, res, next) => {
   }
 });
 
+app.patch('/api/auth/role', async (req, res, next) => {
+  try {
+    const userId = req.headers['x-user-id'] ? parseInt(req.headers['x-user-id'], 10) : (req.user ? req.user.id : null);
+    const { role } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required to update role.' });
+    }
+
+    const newRole = (role === 'VENDOR' || role === 'ADMIN') ? role : 'USER';
+
+    await query('UPDATE users SET role = ? WHERE id = ?', [newRole, userId]);
+
+    const memUser = memoryStore.users.find(u => u.id === userId);
+    if (memUser) memUser.role = newRole;
+
+    res.json({
+      success: true,
+      message: `Account role updated to ${newRole}`,
+      role: newRole,
+      user: { id: userId, role: newRole }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PRIVATE BOOKMARKS
 app.get('/api/bookmarks', async (req, res, next) => {
   try {
