@@ -154,7 +154,7 @@ export async function initDatabase() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS rentals (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        vendor_user_id INT NULL,
+        vendor_user_id VARCHAR(255) NULL,
         title VARCHAR(255) NOT NULL,
         vendor VARCHAR(255) NOT NULL,
         category ENUM('Bike', 'Scooter', 'Car') NOT NULL DEFAULT 'Bike',
@@ -172,6 +172,10 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB;
     `);
+
+    try {
+      await pool.query("ALTER TABLE rentals MODIFY COLUMN vendor_user_id VARCHAR(255) NULL;");
+    } catch (e) {}
 
     // 6. Explore Places Table
     await pool.query(`

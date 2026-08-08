@@ -319,11 +319,18 @@ app.get('/api/rentals', async (req, res, next) => {
 
 app.get('/api/rentals/vendor', authenticateToken, async (req, res, next) => {
   try {
-    const vendorUserId = req.user.id;
-    let myFleet = await query('SELECT * FROM rentals WHERE vendor_user_id = ? ORDER BY id DESC', [vendorUserId]);
+    const vendorUserId = String(req.user.id);
+    const vendorUuid = req.user.uuid ? String(req.user.uuid) : vendorUserId;
+
+    let myFleet = await query(
+      'SELECT * FROM rentals WHERE vendor_user_id = ? OR vendor_user_id = ? ORDER BY id DESC',
+      [vendorUserId, vendorUuid]
+    );
 
     if (memoryStore && memoryStore.rentals) {
-      const memFleet = memoryStore.rentals.filter(r => String(r.vendor_user_id) === String(vendorUserId));
+      const memFleet = memoryStore.rentals.filter(
+        r => String(r.vendor_user_id) === vendorUserId || String(r.vendor_user_id) === vendorUuid
+      );
       const existingIds = new Set(myFleet.map(f => f.id));
       for (const mf of memFleet) {
         if (!existingIds.has(mf.id)) {
@@ -354,13 +361,14 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
     const validCategory = ['Car', 'Bike', 'Scooter'].includes(category) ? category : 'Bike';
     const vendorName = req.user.name || 'Campus Vendor';
     const defaultImage = image || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80';
+    const vendorUserIdStr = String(req.user.id);
 
     const result = await query(
       `INSERT INTO rentals 
        (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available) 
        VALUES (?, ?, ?, ?, ?, 5.0, 1, '0.5 km away', ?, ?, ?, ?, ?, ?, TRUE)`,
       [
-        req.user.id,
+        vendorUserIdStr,
         title,
         vendorName,
         validCategory,
@@ -376,7 +384,7 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
 
     const newRentalItem = {
       id: result.insertId || (memoryStore.rentals.length + 1),
-      vendor_user_id: req.user.id,
+      vendor_user_id: vendorUserIdStr,
       title,
       vendor: vendorName,
       category: validCategory,
