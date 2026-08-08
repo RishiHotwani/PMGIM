@@ -74,19 +74,35 @@ function MainAppContent() {
   };
 
   const handleToggleBookmark = async (id) => {
+    if (!currentUser?.id) return;
+
+    // Optimistic UI update
+    setExplorePlaces((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, is_bookmarked: !p.is_bookmarked } : p))
+    );
+
     try {
+      const res = await fetch(`/api/bookmarks/${id}/toggle`, {
+        method: 'POST',
+        headers: {
+          'x-user-id': currentUser.id,
+          'x-user-name': currentUser.name || 'User'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.isBookmarked !== undefined) {
+          setExplorePlaces((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, is_bookmarked: Boolean(data.isBookmarked) } : p))
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Toggle bookmark error:', err);
+      // Rollback on error
       setExplorePlaces((prev) =>
         prev.map((p) => (p.id === id ? { ...p, is_bookmarked: !p.is_bookmarked } : p))
       );
-      await fetch(`/api/bookmarks/${id}/toggle`, {
-        method: 'POST',
-        headers: {
-          'x-user-id': currentUser?.id || '',
-          'x-user-name': currentUser?.name || 'User'
-        }
-      });
-    } catch (err) {
-      console.error('Toggle bookmark error:', err);
     }
   };
 

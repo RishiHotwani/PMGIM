@@ -344,12 +344,19 @@ app.delete('/api/rentals/:id', authenticateToken, async (req, res, next) => {
 app.get('/api/explore', async (req, res, next) => {
   try {
     const userId = req.headers['x-user-id'] ? parseInt(req.headers['x-user-id'], 10) : null;
-    let sql = 'SELECT * FROM explore_places ORDER BY id ASC';
+    let sql = `
+      SELECT ep.id, ep.name, ep.category, ep.rating, ep.distance, ep.price, ep.image, 
+             ep.description, ep.maps_url, ep.best_time, ep.est_cost, ep.pro_tips, 
+             FALSE AS is_bookmarked 
+      FROM explore_places ep 
+      ORDER BY ep.id ASC
+    `;
     let params = [];
 
     if (userId) {
       sql = `
-        SELECT ep.*, 
+        SELECT ep.id, ep.name, ep.category, ep.rating, ep.distance, ep.price, ep.image, 
+               ep.description, ep.maps_url, ep.best_time, ep.est_cost, ep.pro_tips, 
                IF(ub.id IS NOT NULL, TRUE, FALSE) AS is_bookmarked 
         FROM explore_places ep 
         LEFT JOIN user_bookmarks ub 

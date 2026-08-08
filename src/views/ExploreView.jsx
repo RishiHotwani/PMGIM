@@ -1,46 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { MapPin, Star, Heart, Compass, Info } from 'lucide-react';
 import SpotDetailModal from '../components/SpotDetailModal';
 
 export default function ExploreView({ places = [], onLogAction, currentUser, onToggleBookmark }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedSpot, setSelectedSpot] = useState(null);
-  const [userBookmarks, setUserBookmarks] = useState({});
 
   const dynamicCategories = Array.from(
     new Set(places.map((p) => p.category).filter(Boolean))
   );
   const categories = ['All', ...dynamicCategories];
-
-  const fetchUserBookmarks = async () => {
-    if (!currentUser?.id) {
-      setUserBookmarks({});
-      return;
-    }
-    try {
-      const res = await fetch('/api/bookmarks', {
-        headers: {
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name || 'User'
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const bookmarkedSet = new Set(data.map((b) => Number(b.id)));
-        const map = {};
-        places.forEach((p) => {
-          map[p.id] = bookmarkedSet.has(Number(p.id));
-        });
-        setUserBookmarks(map);
-      }
-    } catch (err) {
-      console.error('Fetch bookmarks error:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchUserBookmarks();
-  }, [currentUser, places]);
 
   const filteredPlaces = places.filter((item) => {
     if (selectedCategory === 'All') return true;
@@ -52,31 +21,14 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
     if (onLogAction) onLogAction('VIEW_EXPLORE_SPOT', `Opened details for spot: ${spot.name}`);
   };
 
-  const handleToggleBookmark = async (spotId) => {
+  const handleToggleBookmarkClick = (e, spotId) => {
+    e.stopPropagation();
     if (!currentUser?.id) {
       alert('Please log in to bookmark places.');
       return;
     }
-
-    const currentVal = !!userBookmarks[spotId];
-    const newVal = !currentVal;
-
-    // Optimistic UI update
-    setUserBookmarks((prev) => ({ ...prev, [spotId]: newVal }));
-    if (onToggleBookmark) onToggleBookmark(spotId);
-
-    try {
-      await fetch(`/api/bookmarks/${spotId}/toggle`, {
-        method: 'POST',
-        headers: {
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name || 'User'
-        }
-      });
-    } catch (err) {
-      console.error('Bookmark toggle error:', err);
-      // Rollback on error
-      setUserBookmarks((prev) => ({ ...prev, [spotId]: currentVal }));
+    if (onToggleBookmark) {
+      onToggleBookmark(spotId);
     }
   };
 
@@ -131,7 +83,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
       {/* Spots Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPlaces.map((item) => {
-          const isBookmarked = currentUser?.id ? !!userBookmarks[item.id] : false;
+          const isBookmarked = currentUser?.id ? Boolean(item.is_bookmarked) : false;
           return (
             <div
               key={item.id}
@@ -164,10 +116,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
 
                     {/* Bookmark Button */}
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleBookmark(item.id);
-                      }}
+                      onClick={(e) => handleToggleBookmarkClick(e, item.id)}
                       className={`p-2 rounded-full backdrop-blur-md transition-all ${
                         isBookmarked
                           ? 'bg-rose-500 text-white shadow-md'
