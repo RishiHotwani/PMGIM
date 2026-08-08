@@ -464,16 +464,20 @@ export async function query(sql, params = []) {
     memoryStore.place_reviews.push(newRev);
     return { insertId: newRev.id };
   }
-  if (lowerSql.includes('select ep.*')) {
+  if (lowerSql.includes('inner join user_bookmarks')) {
     const uid = params[0];
-    const bookmarkedSet = new Set(memoryStore.user_bookmarks.filter(b => b.user_id === uid).map(b => b.place_id));
+    const bookmarkedIds = new Set(memoryStore.user_bookmarks.filter(b => b.user_id === uid).map(b => b.place_id));
+    return memoryStore.explore_places.filter(p => bookmarkedIds.has(p.id));
+  }
+  if (lowerSql.includes('from explore_places')) {
+    const uid = params[0] || null;
+    const bookmarkedSet = new Set(
+      uid ? memoryStore.user_bookmarks.filter(b => b.user_id === uid).map(b => b.place_id) : []
+    );
     return memoryStore.explore_places.map(p => ({
       ...p,
       is_bookmarked: uid ? bookmarkedSet.has(p.id) : false
     }));
-  }
-  if (lowerSql.includes('select * from explore_places')) {
-    return memoryStore.explore_places.map(p => ({ ...p, is_bookmarked: false }));
   }
   if (lowerSql.includes('select * from rentals')) return memoryStore.rentals;
   if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips;
