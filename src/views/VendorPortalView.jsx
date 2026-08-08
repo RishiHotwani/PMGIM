@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PlusCircle, Bike, Car, Shield, Trash2, CheckCircle2, XCircle, DollarSign, MapPin, Tag } from 'lucide-react';
 
-export default function VendorPortalView({ currentUser }) {
+export default function VendorPortalView({ currentUser, onRefreshRentals }) {
   const [fleet, setFleet] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -20,9 +20,16 @@ export default function VendorPortalView({ currentUser }) {
     location: 'Sanquelim / Campus Gate'
   });
 
+  const getAuthHeaders = () => ({
+    'x-user-id': currentUser?.id || '',
+    'x-user-name': currentUser?.name || 'Vendor'
+  });
+
   const fetchMyFleet = async () => {
     try {
-      const res = await fetch('/api/rentals/vendor');
+      const res = await fetch('/api/rentals/vendor', {
+        headers: getAuthHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         setFleet(data);
@@ -36,7 +43,7 @@ export default function VendorPortalView({ currentUser }) {
 
   useEffect(() => {
     fetchMyFleet();
-  }, []);
+  }, [currentUser]);
 
   const handlePostVehicle = async (e) => {
     e.preventDefault();
@@ -46,7 +53,10 @@ export default function VendorPortalView({ currentUser }) {
     try {
       const res = await fetch('/api/rentals', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify(formData)
       });
       const data = await res.json();
@@ -66,6 +76,7 @@ export default function VendorPortalView({ currentUser }) {
         location: 'Sanquelim / Campus Gate'
       });
       fetchMyFleet();
+      if (onRefreshRentals) onRefreshRentals();
     } catch (err) {
       alert(err.message);
     } finally {
@@ -75,8 +86,12 @@ export default function VendorPortalView({ currentUser }) {
 
   const handleToggle = async (id) => {
     try {
-      await fetch(`/api/rentals/${id}/toggle`, { method: 'PATCH' });
+      await fetch(`/api/rentals/${id}/toggle`, {
+        method: 'PATCH',
+        headers: getAuthHeaders()
+      });
       fetchMyFleet();
+      if (onRefreshRentals) onRefreshRentals();
     } catch (err) {
       console.error(err);
     }
@@ -85,8 +100,12 @@ export default function VendorPortalView({ currentUser }) {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to remove this vehicle listing?')) return;
     try {
-      await fetch(`/api/rentals/${id}`, { method: 'DELETE' });
+      await fetch(`/api/rentals/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
       fetchMyFleet();
+      if (onRefreshRentals) onRefreshRentals();
     } catch (err) {
       console.error(err);
     }

@@ -491,7 +491,49 @@ export async function query(sql, params = []) {
       is_bookmarked: uid ? bookmarkedSet.has(Number(p.id)) : false
     }));
   }
-  if (lowerSql.includes('select * from rentals')) return memoryStore.rentals;
+  if (lowerSql.includes('insert into rentals')) {
+    const newRental = {
+      id: memoryStore.rentals.length + 1,
+      vendor_user_id: params[0],
+      title: params[1],
+      vendor: params[2],
+      category: params[3],
+      price_per_day: Number(params[4]),
+      rating: 5.0,
+      total_ratings: 1,
+      distance: '0.5 km away',
+      fuel: params[5] || 'Petrol',
+      transmission: params[6] || 'Automatic',
+      tags: params[7] || 'Verified Vendor',
+      image: params[8],
+      description: params[9] || '',
+      location: params[10] || 'Sanquelim / Campus Gate',
+      is_available: true,
+      created_at: new Date().toISOString()
+    };
+    memoryStore.rentals.unshift(newRental);
+    return { insertId: newRental.id, affectedRows: 1 };
+  }
+
+  if (lowerSql.includes('where vendor_user_id')) {
+    const vid = params[0];
+    return memoryStore.rentals.filter(r => String(r.vendor_user_id) === String(vid) || !r.vendor_user_id);
+  }
+
+  if (lowerSql.includes('update rentals set is_available')) {
+    const rid = Number(params[0]);
+    const item = memoryStore.rentals.find(r => Number(r.id) === rid);
+    if (item) item.is_available = !item.is_available;
+    return { affectedRows: 1 };
+  }
+
+  if (lowerSql.includes('delete from rentals')) {
+    const rid = Number(params[0]);
+    memoryStore.rentals = memoryStore.rentals.filter(r => Number(r.id) !== rid);
+    return { affectedRows: 1 };
+  }
+
+  if (lowerSql.includes('from rentals')) return memoryStore.rentals;
   if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips;
 
   return [];

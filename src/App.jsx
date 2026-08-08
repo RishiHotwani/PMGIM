@@ -157,6 +157,7 @@ function MainAppContent() {
           {activeTab === 'vendor_portal' && (
             <VendorPortalView
               currentUser={currentUser}
+              onRefreshRentals={fetchData}
             />
           )}
 
