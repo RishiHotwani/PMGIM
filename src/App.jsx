@@ -150,6 +150,7 @@ function MainAppContent() {
               rentals={rentals}
               onLogAction={handleLogAction}
               currentUser={currentUser}
+              onRefreshRentals={fetchData}
             />
           )}
 

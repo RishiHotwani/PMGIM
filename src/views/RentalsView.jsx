@@ -1,12 +1,38 @@
 import React, { useState } from 'react';
-import { Bike, Shield, Clock, Star, MapPin, Search, PlusCircle, CheckCircle, Info, Fuel, Gauge, Car } from 'lucide-react';
+import { Bike, Shield, Clock, Star, MapPin, Search, PlusCircle, CheckCircle, Info, Fuel, Gauge, Car, X, Sparkles } from 'lucide-react';
 import BookingCheckoutModal from '../components/BookingCheckoutModal';
 
-export default function RentalsView({ rentals = [], onLogAction, currentUser }) {
+export default function RentalsView({ rentals = [], onLogAction, currentUser, onRefreshRentals }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [checkoutVehicle, setCheckoutVehicle] = useState(null);
+
+  // Vendor Add Vehicle Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const isVendor = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+
+  const [formData, setFormData] = useState({
+    title: '',
+    category: 'Bike',
+    price_per_day: '',
+    fuel: 'Petrol',
+    transmission: 'Automatic',
+    tags: 'Verified Vendor',
+    image: '',
+    description: '',
+    location: 'Sanquelim / Campus Gate'
+  });
+
+  const presetImages = [
+    { label: 'Scooter (Activa)', url: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80' },
+    { label: 'Cruiser Bike (RE Hunter)', url: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80' },
+    { label: 'Hatchback Car (Swift)', url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80' },
+    { label: '125cc Scooter (Jupiter)', url: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80' }
+  ];
 
   const categories = ['All', 'Bikes', 'Scooters', 'Cars'];
 
@@ -37,8 +63,66 @@ export default function RentalsView({ rentals = [], onLogAction, currentUser }) 
     if (onLogAction) onLogAction('START_RENTAL_CHECKOUT', `Initiated checkout for vehicle: ${vehicle.title}`);
   };
 
+  const handlePostVehicle = async (e) => {
+    e.preventDefault();
+    if (!formData.title || !formData.price_per_day) {
+      alert('Please provide Vehicle Title and Daily Rate.');
+      return;
+    }
+
+    setSubmitting(true);
+    setSuccessMsg('');
+
+    try {
+      const res = await fetch('/api/rentals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || '',
+          'x-user-name': currentUser?.name || 'Vendor'
+        },
+        body: JSON.stringify({
+          ...formData,
+          image: formData.image || presetImages[0].url
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to post vehicle');
+
+      setSuccessMsg(`🎉 Success! ${formData.title} is now listed for students to book.`);
+      setShowAddModal(false);
+      setFormData({
+        title: '',
+        category: 'Bike',
+        price_per_day: '',
+        fuel: 'Petrol',
+        transmission: 'Automatic',
+        tags: 'Verified Vendor',
+        image: '',
+        description: '',
+        location: 'Sanquelim / Campus Gate'
+      });
+
+      if (onRefreshRentals) onRefreshRentals();
+      if (onLogAction) onLogAction('POST_VENDOR_VEHICLE', `Vendor posted new vehicle: ${formData.title}`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8 animate-fadeIn">
+      {/* Success Notification Banner */}
+      {successMsg && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-700 text-xs font-bold flex items-center justify-between animate-fadeIn">
+          <span>{successMsg}</span>
+          <button onClick={() => setSuccessMsg('')} className="text-emerald-700 font-extrabold text-sm ml-2">✕</button>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="space-y-2">
@@ -53,6 +137,17 @@ export default function RentalsView({ rentals = [], onLogAction, currentUser }) 
             Directly book verified self-drive vehicles from local Sanquelim vendors for campus commute and beach road trips.
           </p>
         </div>
+
+        {/* Vendor Add Vehicle Quick Button */}
+        {isVendor && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-5 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-emerald-500/30 transition-all flex items-center gap-2 shrink-0 border border-emerald-400/30 hover:scale-105"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>+ Add New Vehicle</span>
+          </button>
+        )}
       </div>
 
       {/* Filter & Search Bar */}
@@ -158,6 +253,150 @@ export default function RentalsView({ rentals = [], onLogAction, currentUser }) 
         ))}
       </div>
 
+      {/* Vendor Add Vehicle Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 relative max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-6 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-lg font-black">List New Rental Vehicle</h3>
+              </div>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-1.5 bg-white/20 hover:bg-white/30 rounded-full text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handlePostVehicle} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Vehicle Name / Model *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Honda Activa 6G, Royal Enfield Hunter 350"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Vehicle Category *</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Scooter">Scooter</option>
+                    <option value="Bike">Bike</option>
+                    <option value="Car">Car</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Daily Rate (₹ / Day) *</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="e.g. 450"
+                    value={formData.price_per_day}
+                    onChange={(e) => setFormData({ ...formData, price_per_day: e.target.value })}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Fuel Type</label>
+                  <select
+                    value={formData.fuel}
+                    onChange={(e) => setFormData({ ...formData, fuel: e.target.value })}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Petrol">Petrol</option>
+                    <option value="Electric">Electric</option>
+                    <option value="Diesel">Diesel</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Transmission</label>
+                  <select
+                    value={formData.transmission}
+                    onChange={(e) => setFormData({ ...formData, transmission: e.target.value })}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Automatic">Automatic</option>
+                    <option value="Manual">Manual</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Photo URL</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  value={formData.image}
+                  onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                
+                {/* Photo Presets */}
+                <div className="flex items-center gap-1.5 pt-1 overflow-x-auto">
+                  <span className="text-[10px] text-slate-400 font-bold shrink-0">Presets:</span>
+                  {presetImages.map((preset, idx) => (
+                    <button
+                      type="button"
+                      key={idx}
+                      onClick={() => setFormData({ ...formData, image: preset.url })}
+                      className="px-2 py-1 bg-slate-100 hover:bg-blue-50 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 shrink-0"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Pickup Location</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sanquelim Campus Gate"
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Description & Guidelines</label>
+                <textarea
+                  rows="2"
+                  placeholder="e.g. Clean helmets provided upon pickup. Valid driver license required."
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 mt-4"
+              >
+                <span>{submitting ? 'Posting Vehicle...' : 'Publish Vehicle Listing'}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Vehicle Specs Modal */}
       {selectedVehicle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
@@ -166,7 +405,7 @@ export default function RentalsView({ rentals = [], onLogAction, currentUser }) 
               onClick={() => setSelectedVehicle(null)}
               className="absolute top-4 right-4 z-10 p-2 bg-white/80 backdrop-blur-md rounded-full text-slate-700 hover:bg-white shadow-md transition-all"
             >
-              <Info className="w-5 h-5" />
+              <X className="w-5 h-5" />
             </button>
 
             <div className="relative h-56 w-full bg-slate-100">
