@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { fileURLToPath } from 'url';
 import { ENV } from './config/env.js';
-import { initDatabase, query } from './config/database.js';
+import { initDatabase, query, memoryStore } from './config/database.js';
 import { logAuditActivity } from './utils/logger.js';
 import authRouter from './modules/auth/auth.routes.js';
 import { globalRateLimiter } from './middleware/rateLimiter.js';
