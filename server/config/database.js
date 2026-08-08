@@ -434,19 +434,6 @@ export async function initDatabase() {
 
 async function seedInitialData() {
   try {
-    const [rentalsRows] = await pool.query('SELECT COUNT(*) as count FROM rentals');
-    if (rentalsRows[0].count === 0) {
-      const rentals = [
-        [null, 'Honda Activa 6G', 'Coastal Rides Sanquelim', 'Scooter', 350, 4.8, 132, '1.2 km away', 'Petrol', 'Automatic', 'Women friendly', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Reliable 110cc automatic scooter for smooth campus commute.', 'Sanquelim Gate', true, 'ACTIVE'],
-        [null, 'Royal Enfield Hunter 350', 'Goa Bike Rentals', 'Bike', 750, 4.9, 88, '0.8 km away', 'Petrol', 'Manual', 'Popular choice', 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', 'Cruiser bike ideal for North Goa beach road trips.', 'Mapusa Road', true, 'ACTIVE'],
-        [null, 'Maruti Suzuki Swift', 'Sanq Cabs & Self Drive', 'Car', 1800, 4.7, 54, '2.0 km away', 'Petrol', 'Manual', 'AC Hatchback', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', '5-seater AC hatchback with unlimited kilometers.', 'Thivim Station', true, 'ACTIVE'],
-        [null, 'TVS Jupiter 125', 'Campus Wheels', 'Scooter', 320, 4.6, 95, '0.5 km away', 'Petrol', 'Automatic', 'Budget friendly', 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', 'Economical 125cc scooter with spacious under-seat storage.', 'GIM Hostels', true, 'ACTIVE']
-      ];
-      for (const r of rentals) {
-        await pool.query('INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', r);
-      }
-    }
-
     const [exploreRows] = await pool.query('SELECT COUNT(*) as count FROM explore_places');
     if (exploreRows[0].count === 0) {
       const places = [
@@ -481,12 +468,7 @@ async function seedInitialData() {
 }
 
 function seedMemoryData() {
-  memoryStore.rentals = [
-    { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true, status: 'ACTIVE', description: 'Campus scooter.', location: 'Sanquelim' },
-    { id: 2, title: 'Royal Enfield Hunter 350', vendor: 'Goa Bike Rentals', category: 'Bike', price_per_day: 750, rating: 4.9, total_ratings: 88, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Popular choice', image: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', is_available: true, status: 'ACTIVE', description: 'Cruiser bike.', location: 'Mapusa' },
-    { id: 3, title: 'Maruti Suzuki Swift', vendor: 'Sanq Cabs & Self Drive', category: 'Car', price_per_day: 1800, rating: 4.7, total_ratings: 54, distance: '2.0 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'AC Hatchback', image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', is_available: true, status: 'ACTIVE', description: '5-seater AC hatchback.', location: 'Thivim' },
-    { id: 4, title: 'TVS Jupiter 125', vendor: 'Campus Wheels', category: 'Scooter', price_per_day: 320, rating: 4.6, total_ratings: 95, distance: '0.5 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Budget friendly', image: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', is_available: true, status: 'ACTIVE', description: 'Economical 125cc scooter.', location: 'GIM Hostels' }
-  ];
+  memoryStore.rentals = [];
 
   memoryStore.explore_places = [
     { id: 1, name: 'Mandrem Beach & Lagoon (Vaayu)', category: 'Beaches', rating: 4.9, distance: '36 km · 55 min scooter', price: '₹450 per person', image: 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=800&q=80', is_bookmarked: false, description: 'Beautiful beach & Mandrem lagoon.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Mandrem+Beach+Vaayu+Goa', best_time: '7:00 AM – 11:00 AM', est_cost: '₹450 / person', pro_tips: 'Smoothie bowls & SUP boards at Vaayu.' },

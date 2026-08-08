@@ -165,25 +165,6 @@ export async function initDatabase() {
 }
 
 async function seedInitialData() {
-  const [rentalsRows] = await pool.query('SELECT COUNT(*) as count FROM rentals');
-  if (rentalsRows[0].count === 0) {
-    const rentals = [
-      ['Honda Activa 6G', 'Coastal Rides Sanquelim', 350, 4.8, 132, '1.2 km away', 'Petrol', 'Automatic', 'Women friendly', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', true],
-      ['Royal Enfield Hunter 350', 'Goa Bike Rentals', 750, 4.9, 88, '0.8 km away', 'Petrol', 'Manual', 'Popular choice', 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', true],
-      ['Maruti Suzuki Swift', 'Sanq Cabs & Self Drive', 1800, 4.7, 54, '2.0 km away', 'Petrol', 'Manual', 'AC Sedan', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', true],
-      ['TVS Jupiter 125', 'Campus Wheels', 320, 4.6, 95, '0.5 km away', 'Petrol', 'Automatic', 'Budget friendly', 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80', true],
-      ['KTM Duke 200', 'Velocity Rentals', 900, 4.8, 41, '1.5 km away', 'Petrol', 'Manual', 'Sporty', 'https://images.unsplash.com/photo-1558981359-219d6364c9c8?auto=format&fit=crop&w=800&q=80', false],
-      ['Mahindra Thar 4x4', 'Goa Safari Rentals', 3500, 4.9, 62, '3.0 km away', 'Diesel', 'Automatic', 'Beach Cruising', 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80', true],
-      ['Ather 450X EV', 'Green Motion Campus', 400, 4.9, 110, '0.2 km away', 'Electric', 'Automatic', 'Eco Friendly', 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', true]
-    ];
-    for (const r of rentals) {
-      await pool.query(
-        'INSERT INTO rentals (title, vendor, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        r
-      );
-    }
-  }
-
   const [exploreRows] = await pool.query('SELECT COUNT(*) as count FROM explore_places');
   if (exploreRows[0].count === 0) {
     const places = [
@@ -220,10 +201,7 @@ async function seedInitialData() {
 }
 
 function seedMemoryData() {
-  memoryStore.rentals = [
-    { id: 1, title: 'Honda Activa 6G', vendor: 'Coastal Rides Sanquelim', price_per_day: 350, rating: 4.8, total_ratings: 132, distance: '1.2 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Women friendly', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', is_available: true },
-    { id: 2, title: 'Royal Enfield Hunter 350', vendor: 'Goa Bike Rentals', price_per_day: 750, rating: 4.9, total_ratings: 88, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Popular choice', image: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80', is_available: true }
-  ];
+  memoryStore.rentals = [];
   memoryStore.explore_places = [
     { id: 1, name: 'Arambol Beach', category: 'Beaches', rating: 4.7, distance: '38 km · 1 hr 10 min scooter', price: '₹400 per person', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', is_bookmarked: false }
   ];

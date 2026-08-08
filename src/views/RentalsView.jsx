@@ -98,14 +98,19 @@ export default function RentalsView({ rentals = [], loading = false, onLogAction
         </div>
       ) : filteredRentals.length === 0 ? (
         <div className="py-16 bg-white rounded-3xl border border-slate-100 p-8 text-center text-slate-500 space-y-3">
-          <p className="text-sm font-extrabold text-slate-700">No vehicles currently match your filter.</p>
-          <p className="text-xs text-slate-400">Try selecting "All" or clearing your search term.</p>
+          <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-2">
+            <Bike className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-extrabold text-slate-900">No Vehicles Available</h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            No vehicles have been listed yet. Check back soon or become a vendor to list a vehicle.
+          </p>
           {onRefresh && (
             <button
               onClick={onRefresh}
-              className="py-2 px-4 bg-blue-600 text-white font-extrabold text-xs rounded-xl hover:bg-blue-500 transition-colors"
+              className="py-2.5 px-5 bg-blue-600 text-white font-extrabold text-xs rounded-xl hover:bg-blue-500 transition-colors shadow-md shadow-blue-500/20"
             >
-              Refresh Rentals
+              Refresh Rentals Catalog
             </button>
           )}
         </div>

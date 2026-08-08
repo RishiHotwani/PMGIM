@@ -14,7 +14,7 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
       iconBg: 'bg-blue-400/30 text-white',
       icon: Bike,
       tab: 'rentals',
-      badge: '4 Vehicles'
+      badge: 'Self-Drive'
     },
     {
       id: 'travel',
