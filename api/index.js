@@ -216,11 +216,11 @@ app.get('/api/bookmarks', async (req, res, next) => {
 
 app.post('/api/bookmarks/:placeId/toggle', async (req, res, next) => {
   try {
-    const { placeId } = req.params;
+    const placeId = parseInt(req.params.placeId, 10);
     const userId = req.headers['x-user-id'] ? parseInt(req.headers['x-user-id'], 10) : null;
 
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Log in required to bookmark places.' });
+    if (!userId || isNaN(placeId)) {
+      return res.status(400).json({ success: false, message: 'Log in required to bookmark places.' });
     }
 
     const existing = await query('SELECT * FROM user_bookmarks WHERE user_id = ? AND place_id = ?', [userId, placeId]);

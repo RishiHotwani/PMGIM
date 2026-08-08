@@ -436,28 +436,32 @@ export async function query(sql, params = []) {
   }
 
   if (lowerSql.includes('select * from user_bookmarks')) {
-    return memoryStore.user_bookmarks.filter(b => b.user_id === params[0]);
+    const uid = Number(params[0]);
+    const pid = params[1] ? Number(params[1]) : null;
+    return memoryStore.user_bookmarks.filter(b => Number(b.user_id) === uid && (!pid || Number(b.place_id) === pid));
   }
   if (lowerSql.includes('insert into user_bookmarks')) {
-    memoryStore.user_bookmarks.push({ user_id: params[0], place_id: params[1], created_at: new Date().toISOString() });
+    memoryStore.user_bookmarks.push({ user_id: Number(params[0]), place_id: Number(params[1]), created_at: new Date().toISOString() });
     return { insertId: 1 };
   }
   if (lowerSql.includes('delete from user_bookmarks')) {
-    memoryStore.user_bookmarks = memoryStore.user_bookmarks.filter(b => !(b.user_id === params[0] && b.place_id === params[1]));
+    const uid = Number(params[0]);
+    const pid = Number(params[1]);
+    memoryStore.user_bookmarks = memoryStore.user_bookmarks.filter(b => !(Number(b.user_id) === uid && Number(b.place_id) === pid));
     return { affectedRows: 1 };
   }
 
   if (lowerSql.includes('select * from place_reviews')) {
-    return memoryStore.place_reviews.filter(r => r.place_id === parseInt(params[0], 10));
+    return memoryStore.place_reviews.filter(r => Number(r.place_id) === Number(params[0]));
   }
   if (lowerSql.includes('insert into place_reviews')) {
     const newRev = {
       id: memoryStore.place_reviews.length + 1,
-      place_id: parseInt(params[0], 10),
-      user_id: params[1] || null,
+      place_id: Number(params[0]),
+      user_id: params[1] ? Number(params[1]) : null,
       user_name: params[2],
       user_avatar: params[3] || 'US',
-      rating: parseInt(params[4], 10),
+      rating: Number(params[4]),
       comment: params[5],
       created_at: new Date().toISOString()
     };
@@ -465,18 +469,18 @@ export async function query(sql, params = []) {
     return { insertId: newRev.id };
   }
   if (lowerSql.includes('inner join user_bookmarks')) {
-    const uid = params[0];
-    const bookmarkedIds = new Set(memoryStore.user_bookmarks.filter(b => b.user_id === uid).map(b => b.place_id));
-    return memoryStore.explore_places.filter(p => bookmarkedIds.has(p.id));
+    const uid = Number(params[0]);
+    const bookmarkedIds = new Set(memoryStore.user_bookmarks.filter(b => Number(b.user_id) === uid).map(b => Number(b.place_id)));
+    return memoryStore.explore_places.filter(p => bookmarkedIds.has(Number(p.id)));
   }
   if (lowerSql.includes('from explore_places')) {
-    const uid = params[0] || null;
+    const uid = params[0] ? Number(params[0]) : null;
     const bookmarkedSet = new Set(
-      uid ? memoryStore.user_bookmarks.filter(b => b.user_id === uid).map(b => b.place_id) : []
+      uid ? memoryStore.user_bookmarks.filter(b => Number(b.user_id) === uid).map(b => Number(b.place_id)) : []
     );
     return memoryStore.explore_places.map(p => ({
       ...p,
-      is_bookmarked: uid ? bookmarkedSet.has(p.id) : false
+      is_bookmarked: uid ? bookmarkedSet.has(Number(p.id)) : false
     }));
   }
   if (lowerSql.includes('select * from rentals')) return memoryStore.rentals;
