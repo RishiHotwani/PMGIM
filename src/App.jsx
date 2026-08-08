@@ -42,7 +42,7 @@ function MainAppContent() {
 
   useEffect(() => {
     fetchData();
-  }, [currentUser]);
+  }, [currentUser, activeTab]);
 
   // Log user action to backend
   const handleLogAction = async (type, description, details = '') => {
@@ -70,6 +70,7 @@ function MainAppContent() {
   const handleTabChange = (newTab) => {
     handleLogAction('SWITCH_TAB', `Switched active tab to: ${newTab}`);
     setActiveTab(newTab);
+    fetchData();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
