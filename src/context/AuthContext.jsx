@@ -6,29 +6,60 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Silent session restore via /api/auth/me or /api/auth/refresh on initial load
+  const saveUserSession = (user, accessToken) => {
+    setCurrentUser(user);
+    if (user) {
+      try {
+        localStorage.setItem('gim_user', JSON.stringify(user));
+        if (accessToken) localStorage.setItem('gim_token', accessToken);
+      } catch (e) {}
+    } else {
+      try {
+        localStorage.removeItem('gim_user');
+        localStorage.removeItem('gim_token');
+      } catch (e) {}
+    }
+  };
+
   const restoreSession = async () => {
     try {
-      const res = await fetch('/api/auth/me', {
-        headers: { 'Cache-Control': 'no-cache' }
-      });
+      const storedToken = localStorage.getItem('gim_token');
+      const headers = { 'Cache-Control': 'no-cache' };
+      if (storedToken) {
+        headers['Authorization'] = `Bearer ${storedToken}`;
+      }
+
+      const res = await fetch('/api/auth/me', { headers });
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.user) {
-          setCurrentUser(data.user);
+          saveUserSession(data.user, data.accessToken || storedToken);
           return;
         }
       }
-      // If access token expired, attempt silent refresh via HttpOnly cookie
+
+      // Try refresh endpoint
       const refreshRes = await fetch('/api/auth/refresh', { method: 'POST' });
       if (refreshRes.ok) {
         const refreshData = await refreshRes.json();
         if (refreshData.success && refreshData.user) {
-          setCurrentUser(refreshData.user);
+          saveUserSession(refreshData.user, refreshData.accessToken);
+          return;
         }
+      }
+
+      // Fallback to stored local user
+      const storedUser = localStorage.getItem('gim_user');
+      if (storedUser) {
+        const userObj = JSON.parse(storedUser);
+        setCurrentUser(userObj);
       }
     } catch (err) {
       console.warn('Session restore warning:', err.message);
+      try {
+        const storedUser = localStorage.getItem('gim_user');
+        if (storedUser) setCurrentUser(JSON.parse(storedUser));
+      } catch (e) {}
     } finally {
       setLoading(false);
     }
@@ -63,7 +94,7 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email, password })
     });
     const data = await safeParseJson(res, 'Login failed');
-    setCurrentUser(data.user);
+    saveUserSession(data.user, data.accessToken);
     return data;
   };
 
@@ -74,7 +105,7 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ phone, password })
     });
     const data = await safeParseJson(res, 'Phone login failed');
-    setCurrentUser(data.user);
+    saveUserSession(data.user, data.accessToken);
     return data;
   };
 
@@ -85,7 +116,7 @@ export function AuthProvider({ children }) {
       body: JSON.stringify(userData)
     });
     const data = await safeParseJson(res, 'Registration failed');
-    setCurrentUser(data.user);
+    saveUserSession(data.user, data.accessToken);
     return data;
   };
 
@@ -100,7 +131,7 @@ export function AuthProvider({ children }) {
       body: JSON.stringify(payload)
     });
     const data = await safeParseJson(res, 'Google authentication failed');
-    setCurrentUser(data.user);
+    saveUserSession(data.user, data.accessToken);
     return data;
   };
 
@@ -114,7 +145,8 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ role: newRole })
     });
     const data = await safeParseJson(res, 'Failed to update role');
-    setCurrentUser((prev) => (prev ? { ...prev, role: newRole } : null));
+    const updated = currentUser ? { ...currentUser, role: newRole } : null;
+    saveUserSession(updated, localStorage.getItem('gim_token'));
     return data;
   };
 
@@ -123,9 +155,8 @@ export function AuthProvider({ children }) {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {
       console.error('Logout error:', e);
-    } finally {
-      setCurrentUser(null);
     }
+    saveUserSession(null, null);
   };
 
   const forgotPassword = async (email) => {

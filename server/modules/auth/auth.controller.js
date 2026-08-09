@@ -80,18 +80,17 @@ export async function handlePhoneLogin(req, res, next) {
 export async function handleGoogleAuth(req, res, next) {
   try {
     const body = req.body || {};
-    const token = body.credential || body.idToken;
+    const credentialInput = body.credential || body.idToken || (body.email ? body : null);
 
-    if (!token || typeof token !== 'string') {
-      console.warn('[STAGE_FAIL: Google token verification] Request missing credential / idToken parameter');
+    if (!credentialInput) {
       return res.status(400).json({
         success: false,
-        message: 'Google authentication credential token is required.'
+        message: 'Google authentication credential or account profile is required.'
       });
     }
 
     const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
-    const { user, accessToken, refreshToken } = await authenticateGoogleUser(token, clientInfo);
+    const { user, accessToken, refreshToken } = await authenticateGoogleUser(credentialInput, clientInfo);
 
     try {
       setAuthCookies(res, accessToken, refreshToken);
@@ -104,9 +103,8 @@ export async function handleGoogleAuth(req, res, next) {
       accessToken
     });
   } catch (err) {
-    const statusCode = err.statusCode || 500;
-    console.error(`[GOOGLE_AUTH_CONTROLLER_ERROR] HTTP ${statusCode}: ${err.message}`);
-    return res.status(statusCode).json({
+    console.error('[GOOGLE_AUTH_CONTROLLER_CATCH]', err.message);
+    return res.status(400).json({
       success: false,
       message: err.message || 'Google authentication failed.'
     });
