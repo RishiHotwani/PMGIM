@@ -212,7 +212,7 @@ export const DEFAULT_EXPLORE_PLACES = [
   {
     id: 15,
     name: 'Grand Island Scuba & Snorkeling',
-    category: 'Waterfalls',
+    category: 'Beaches',
     rating: 4.9,
     distance: '38 km · Boat from Candolim',
     price: '₹1800 per person',

@@ -79,7 +79,17 @@ function MainAppContent() {
       if (res.ok && mountedRef.current) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          setExplorePlaces(data);
+          // Merge API places with default places to ensure no new place is omitted
+          const apiMap = new Map(data.map((p) => [p.name.toLowerCase().trim(), p]));
+          const merged = [...data];
+          
+          DEFAULT_EXPLORE_PLACES.forEach((defP) => {
+            if (!apiMap.has(defP.name.toLowerCase().trim())) {
+              merged.push(defP);
+            }
+          });
+
+          setExplorePlaces(merged);
         }
       }
     } catch (err) {
