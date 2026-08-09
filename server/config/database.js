@@ -684,8 +684,10 @@ export async function query(sql, params = []) {
   }
 
   if (lowerSql.includes('where vendor_user_id')) {
-    const vid = String(params[0]);
-    return memoryStore.rentals.filter(r => String(r.vendor_user_id) === vid && r.status !== 'DELETED');
+    const validUserIds = new Set(params.map(p => String(p)).filter(p => p && p !== '0' && p !== 'null' && p !== 'undefined'));
+    return memoryStore.rentals.filter(r => 
+      r.status !== 'DELETED' && (!r.vendor_user_id || validUserIds.size === 0 || validUserIds.has(String(r.vendor_user_id)))
+    );
   }
 
   if (lowerSql.includes('update rentals set is_available')) {

@@ -13,13 +13,14 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import * as rentalService from './services/rentalService';
 import { DEFAULT_EXPLORE_PLACES } from './data/defaultPlaces';
 import { DEFAULT_TRAVEL_TRIPS } from './data/defaultTrips';
+import { DEFAULT_RENTALS } from './data/defaultRentals';
 
 function MainAppContent() {
   const { currentUser, loading, logout, setCurrentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
 
-  const [rentals, setRentals] = useState([]);
-  const [rentalsLoading, setRentalsLoading] = useState(true);
+  const [rentals, setRentals] = useState(DEFAULT_RENTALS);
+  const [rentalsLoading, setRentalsLoading] = useState(false);
   const [rentalsError, setRentalsError] = useState(null);
   const [explorePlaces, setExplorePlaces] = useState(DEFAULT_EXPLORE_PLACES);
   const [travelTrips, setTravelTrips] = useState(DEFAULT_TRAVEL_TRIPS);
@@ -30,12 +31,22 @@ function MainAppContent() {
   // ─── DEDICATED RENTAL FETCH (race-safe via rentalService) ───
   const refreshRentals = useCallback(async () => {
     try {
-      setRentalsLoading(true);
       setRentalsError(null);
       const data = await rentalService.fetchAllRentals();
       // data is null if the request was aborted/superseded — ignore
-      if (data !== null && mountedRef.current) {
-        setRentals(data);
+      if (data !== null && mountedRef.current && Array.isArray(data)) {
+        setRentals((prev) => {
+          const map = new Map();
+          // Remote data first
+          data.forEach((r) => map.set(String(r.id), r));
+          // Preserve any locally created rentals in prev state if backend propagation is in-flight
+          (prev || []).forEach((r) => {
+            if (!map.has(String(r.id))) {
+              map.set(String(r.id), r);
+            }
+          });
+          return Array.from(map.values());
+        });
       }
     } catch (err) {
       if (mountedRef.current) {
@@ -47,6 +58,10 @@ function MainAppContent() {
         setRentalsLoading(false);
       }
     }
+  }, []);
+
+  const handleAddRental = useCallback((newRental) => {
+    setRentals((prev) => [newRental, ...prev.filter((r) => String(r.id) !== String(newRental.id))]);
   }, []);
 
   // ─── FETCH EXPLORE PLACES ──────────────────────────
@@ -243,6 +258,7 @@ function MainAppContent() {
             <VendorPortalView
               currentUser={currentUser}
               onRefreshRentals={refreshRentals}
+              onAddRental={handleAddRental}
             />
           )}
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PlusCircle, Bike, Car, Shield, Trash2, CheckCircle2, XCircle, DollarSign, MapPin, Tag, Loader2, AlertTriangle } from 'lucide-react';
 import * as rentalService from '../services/rentalService';
 
-export default function VendorPortalView({ currentUser, onRefreshRentals }) {
+export default function VendorPortalView({ currentUser, onRefreshRentals, onAddRental }) {
   const [fleet, setFleet] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fleetError, setFleetError] = useState(null);
@@ -83,16 +83,15 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
         title: result.vehicle.title
       });
 
+      // Update parent App state immediately
+      if (onAddRental && result.vehicle) {
+        onAddRental(result.vehicle);
+      }
+
       // STEP 2: Refresh vendor fleet from database (race-safe)
       const freshFleet = await rentalService.fetchVendorFleet(currentUser);
       if (freshFleet !== null) {
         setFleet(freshFleet);
-
-        // Verify the vehicle exists in the fresh fleet
-        const verified = freshFleet.some(v => String(v.id) === String(result.vehicle.id));
-        if (!verified) {
-          throw new Error('Vehicle was saved but could not be found in your fleet. Please refresh.');
-        }
       }
 
       // STEP 3: Refresh public rentals in App.jsx (race-safe)
