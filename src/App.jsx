@@ -159,9 +159,14 @@ function MainAppContent() {
     }
   };
 
+  const [exploreSearchQuery, setExploreSearchQuery] = useState('');
+
   // ─── TAB CHANGE (NO fetchData call — no double-fetch) ───────
-  const handleTabChange = (newTab) => {
+  const handleTabChange = (newTab, queryParam = '') => {
     handleLogAction('SWITCH_TAB', `Switched active tab to: ${newTab}`);
+    if (newTab === 'explore') {
+      setExploreSearchQuery(typeof queryParam === 'string' ? queryParam : '');
+    }
     setActiveTab(newTab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -272,6 +277,7 @@ function MainAppContent() {
               onLogAction={handleLogAction}
               currentUser={currentUser}
               onToggleBookmark={handleToggleBookmark}
+              initialSearchQuery={exploreSearchQuery}
             />
           )}
 
