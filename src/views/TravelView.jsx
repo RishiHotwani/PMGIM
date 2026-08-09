@@ -9,13 +9,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
   const [messageModalTrip, setMessageModalTrip] = useState(null);
   const [chatMessages, setChatMessages] = useState({});
   const [newMessageText, setNewMessageText] = useState('');
-  const [displayTrips, setDisplayTrips] = useState(trips || []);
-
-  useEffect(() => {
-    if (trips) {
-      setDisplayTrips(trips);
-    }
-  }, [trips]);
+  const [createdTrips, setCreatedTrips] = useState([]);
 
   const [newTrip, setNewTrip] = useState({
     title: '',
@@ -36,7 +30,17 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
     return name.substring(0, 2).toUpperCase();
   };
 
-  const filteredTrips = (displayTrips || []).filter((trip) => {
+  // Merge createdTrips with backend trips (createdTrips priority, deduplicated by ID)
+  const allTripsMap = new Map();
+  (createdTrips || []).forEach((t) => allTripsMap.set(String(t.id), t));
+  (trips || []).forEach((t) => {
+    if (!allTripsMap.has(String(t.id))) {
+      allTripsMap.set(String(t.id), t);
+    }
+  });
+  const mergedTrips = Array.from(allTripsMap.values());
+
+  const filteredTrips = mergedTrips.filter((trip) => {
     if (selectedFilter === 'All') return true;
     const titleMatch = (trip.title || '').toLowerCase().includes(selectedFilter.toLowerCase());
     const destMatch = (trip.destination || '').toLowerCase().includes(selectedFilter.toLowerCase());
@@ -57,7 +61,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
       });
       if (res.ok) {
         setJoinedTrips((prev) => [...prev, tripId]);
-        setDisplayTrips((prev) =>
+        setCreatedTrips((prev) =>
           prev.map((t) => (t.id === tripId ? { ...t, seats_left: Math.max(0, (t.seats_left || 1) - 1) } : t))
         );
         onLogAction('JOIN_TRIP', `Joined ride share trip ID #${tripId}`);
@@ -96,7 +100,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         const data = await res.json();
         const createdId = data.id || Date.now();
 
-        // Optimistically prepend created ride to UI
+        // Optimistically prepend created ride to createdTrips state
         const createdRide = {
           id: createdId,
           host_user_id: currentUser?.id || currentUser?.uuid,
@@ -115,7 +119,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
           status: 'ACTIVE'
         };
 
-        setDisplayTrips((prev) => [createdRide, ...prev]);
+        setCreatedTrips((prev) => [createdRide, ...prev]);
         setSelectedFilter('All'); // Reset filter to All so new ride is visible immediately!
         if (onLogAction) onLogAction('POST_TRIP', `Posted new ride share: ${newTrip.title}`);
         setIsModalOpen(false);
