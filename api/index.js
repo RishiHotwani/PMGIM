@@ -550,6 +550,8 @@ app.get('/api/bookmarks', async (req, res, next) => {
 
 app.post('/api/bookmarks/:placeId/toggle', async (req, res, next) => {
   try {
+    if (!checkWritePersistence(res)) return;
+
     const placeId = parseInt(req.params.placeId, 10);
     const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
     const userUuid = req.headers['x-user-uuid'] ? String(req.headers['x-user-uuid']).trim() : '';
@@ -572,7 +574,13 @@ app.post('/api/bookmarks/:placeId/toggle', async (req, res, next) => {
       );
       res.json({ success: true, isBookmarked: false, message: 'Removed from private bookmarks.' });
     } else {
-      await query('INSERT INTO user_bookmarks (user_id, place_id) VALUES (?, ?)', [targetId, placeId]);
+      try {
+        await query('INSERT INTO user_bookmarks (user_id, place_id) VALUES (?, ?)', [targetId, placeId]);
+      } catch (insertErr) {
+        if (!insertErr.message?.includes('ER_DUP_ENTRY')) {
+          throw insertErr;
+        }
+      }
       res.json({ success: true, isBookmarked: true, message: 'Added to private bookmarks.' });
     }
   } catch (err) {

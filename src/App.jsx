@@ -190,6 +190,11 @@ function MainAppContent() {
             prev.map((p) => (p.id === id ? { ...p, is_bookmarked: Boolean(data.isBookmarked) } : p))
           );
         }
+      } else {
+        // Rollback on non-OK response (e.g. 503 database unavailable or 401 unauthenticated)
+        setExplorePlaces((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, is_bookmarked: !p.is_bookmarked } : p))
+        );
       }
     } catch (err) {
       console.error('Toggle bookmark error:', err);

@@ -14,17 +14,6 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
 
   const isVendorRole = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
-  // Sync bookmarks from places prop (real-time single source of truth)
-  useEffect(() => {
-    if (places && places.length > 0) {
-      const saved = places.filter((p) => Boolean(p.is_bookmarked) && p.is_bookmarked !== '0' && p.is_bookmarked !== 0);
-      if (saved.length > 0) {
-        setBookmarks(saved);
-        setLoading(false);
-      }
-    }
-  }, [places]);
-
   const fetchPrivateBookmarks = async () => {
     const targetId = currentUser?.id || currentUser?.uuid || currentUser?.email;
     if (!targetId) return;
