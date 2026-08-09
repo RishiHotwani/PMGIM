@@ -36,18 +36,7 @@ function MainAppContent() {
       const data = await rentalService.fetchAllRentals();
       // data is null if the request was aborted/superseded — ignore
       if (data !== null && mountedRef.current && Array.isArray(data)) {
-        setRentals((prev) => {
-          const map = new Map();
-          // Remote data first
-          data.forEach((r) => map.set(String(r.id), r));
-          // Preserve any locally created rentals in prev state if backend propagation is in-flight
-          (prev || []).forEach((r) => {
-            if (!map.has(String(r.id))) {
-              map.set(String(r.id), r);
-            }
-          });
-          return Array.from(map.values());
-        });
+        setRentals(data);
       }
     } catch (err) {
       if (mountedRef.current) {
@@ -102,29 +91,23 @@ function MainAppContent() {
   const fetchTravelTrips = useCallback(async () => {
     try {
       const res = await fetch('/api/trips', {
-        headers: { 'Cache-Control': 'no-store' }
+        headers: {
+          'x-user-id': String(currentUser?.id || ''),
+          'x-user-uuid': String(currentUser?.uuid || ''),
+          'x-user-email': String(currentUser?.email || ''),
+          'Cache-Control': 'no-store'
+        }
       });
       if (res.ok && mountedRef.current) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          setTravelTrips((prev) => {
-            const map = new Map();
-            // Backend data first
-            data.forEach((t) => map.set(String(t.id), t));
-            // Preserve locally added trips if backend insert is propagating
-            (prev || []).forEach((t) => {
-              if (!map.has(String(t.id))) {
-                map.set(String(t.id), t);
-              }
-            });
-            return Array.from(map.values());
-          });
+          setTravelTrips(data);
         }
       }
     } catch (err) {
       console.error('[App] fetchTravelTrips error:', err.message);
     }
-  }, []);
+  }, [currentUser]);
 
   const handleAddTrip = useCallback((newTrip) => {
     setTravelTrips((prev) => [newTrip, ...prev.filter((t) => String(t.id) !== String(newTrip.id))]);

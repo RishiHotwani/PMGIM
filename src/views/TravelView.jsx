@@ -198,11 +198,8 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
 
       if (res.ok) {
         const data = await res.json();
-        const createdId = data.id || Date.now();
-
-        // Optimistically prepend created ride to createdTrips state
-        const createdRide = {
-          id: createdId,
+        const createdRide = data.data || {
+          id: data.id || Date.now(),
           host_user_id: currentUser?.id || currentUser?.uuid,
           user_name: payload.userName,
           user_initials: payload.userInitials,
@@ -219,9 +216,8 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
           status: 'ACTIVE'
         };
 
-        setCreatedTrips((prev) => [createdRide, ...prev]);
-        if (onAddTrip) onAddTrip(createdRide); // Persist trip to top-level App state!
-        setSelectedFilter('All'); // Reset filter to All so new ride is visible immediately!
+        if (onAddTrip) onAddTrip(createdRide);
+        setSelectedFilter('All');
         if (onLogAction) onLogAction('POST_TRIP', `Posted new ride share: ${newTrip.title}`);
         setIsModalOpen(false);
         setNewTrip({
@@ -236,6 +232,9 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         });
 
         if (onRefreshTrips) onRefreshTrips();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || 'Failed to save ride to database.');
       }
     } catch (err) {
       console.error('Error posting trip:', err);

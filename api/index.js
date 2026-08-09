@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { ENV } from '../server/config/env.js';
-import { initDatabase, query, withTransaction, isInMemoryFallback } from '../server/config/database.js';
+import { initDatabase, query, withTransaction, isInMemoryFallback, checkWritePersistence } from '../server/config/database.js';
 import { logAuditActivity } from '../server/utils/logger.js';
 import authRouter from '../server/modules/auth/auth.routes.js';
 import { globalRateLimiter } from '../server/middleware/rateLimiter.js';
@@ -152,6 +152,7 @@ app.get('/api/rentals/vendor', authenticateToken, async (req, res, next) => {
 
 app.post('/api/rentals', authenticateToken, async (req, res, next) => {
   try {
+    if (!checkWritePersistence(res)) return;
     if (req.user.role !== 'VENDOR' && req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
       return res.status(403).json({ success: false, message: 'Forbidden. Vendor role required to post vehicle listings.' });
     }
@@ -724,6 +725,8 @@ app.get('/api/trips', async (req, res, next) => {
 
 app.post('/api/trips', async (req, res, next) => {
   try {
+    if (!checkWritePersistence(res)) return;
+
     const { title, destination, pickup, date_time, seats_total, vehicle_type, cost, description, userName, userInitials, batchInfo, userId } = req.body;
     
     const hostId = userId ? String(userId) : (req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null);
@@ -750,7 +753,26 @@ app.post('/api/trips', async (req, res, next) => {
       ]
     );
 
-    res.json({ success: true, id: result.insertId });
+    const insertedTrips = await query('SELECT * FROM travel_trips WHERE id = ?', [result.insertId]);
+    const createdTrip = insertedTrips[0] || {
+      id: result.insertId,
+      host_user_id: hostId,
+      user_name: userName || 'Campus User',
+      user_initials: userInitials || 'CU',
+      batch_info: batchInfo || 'PGDM 2026',
+      title,
+      destination: destination || title,
+      pickup: pickup || 'GIM Main Gate',
+      date_time,
+      seats_left: seatsTotalNum,
+      seats_total: seatsTotalNum,
+      vehicle_type: vehicle_type || 'Cab',
+      cost: cost || '₹400 each',
+      description: description || '',
+      status: 'ACTIVE'
+    };
+
+    res.status(201).json({ success: true, id: result.insertId, data: createdTrip });
   } catch (err) {
     next(err);
   }
@@ -758,6 +780,7 @@ app.post('/api/trips', async (req, res, next) => {
 
 app.patch('/api/trips/:id', async (req, res, next) => {
   try {
+    if (!checkWritePersistence(res)) return;
     const { id } = req.params;
     const tripId = parseInt(id, 10);
 
@@ -841,6 +864,7 @@ app.patch('/api/trips/:id', async (req, res, next) => {
 
 app.post('/api/trips/:id/join', async (req, res, next) => {
   try {
+    if (!checkWritePersistence(res)) return;
     const { id } = req.params;
     const { userName, userId } = req.body;
     const uidStr = userId ? String(userId) : (req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : null);
@@ -960,6 +984,7 @@ app.post('/api/trips/:id/join', async (req, res, next) => {
 
 app.delete('/api/trips/:id/leave', async (req, res, next) => {
   try {
+    if (!checkWritePersistence(res)) return;
     const { id } = req.params;
     const uidStr = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : null;
 
