@@ -11,6 +11,7 @@ import VendorPortalView from './views/VendorPortalView';
 import AdminAnalyticsView from './views/AdminAnalyticsView';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import * as rentalService from './services/rentalService';
+import { DEFAULT_EXPLORE_PLACES } from './data/defaultPlaces';
 
 function MainAppContent() {
   const { currentUser, loading, logout, setCurrentUser } = useAuth();
@@ -19,7 +20,7 @@ function MainAppContent() {
   const [rentals, setRentals] = useState([]);
   const [rentalsLoading, setRentalsLoading] = useState(true);
   const [rentalsError, setRentalsError] = useState(null);
-  const [explorePlaces, setExplorePlaces] = useState([]);
+  const [explorePlaces, setExplorePlaces] = useState(DEFAULT_EXPLORE_PLACES);
   const [travelTrips, setTravelTrips] = useState([]);
 
   // Ref to track if the component is mounted (prevent setState after unmount)
@@ -47,30 +48,50 @@ function MainAppContent() {
     }
   }, []);
 
-  // ─── FETCH EXPLORE + TRIPS (separate from rentals) ──────────
-  const fetchExploreAndTrips = useCallback(async () => {
+  // ─── FETCH EXPLORE PLACES ──────────────────────────
+  const fetchExplorePlaces = useCallback(async () => {
     try {
-      const [eRes, tRes] = await Promise.all([
-        fetch('/api/explore', {
-          headers: {
-            'x-user-id': String(currentUser?.id || ''),
-            'x-user-uuid': String(currentUser?.uuid || ''),
-            'x-user-email': String(currentUser?.email || ''),
-            'x-user-name': currentUser?.name || 'User',
-            'Cache-Control': 'no-store'
-          }
-        }),
-        fetch('/api/trips', {
-          headers: { 'Cache-Control': 'no-store' }
-        })
-      ]);
-
-      if (eRes.ok && mountedRef.current) setExplorePlaces(await eRes.json());
-      if (tRes.ok && mountedRef.current) setTravelTrips(await tRes.json());
+      const res = await fetch('/api/explore', {
+        headers: {
+          'x-user-id': String(currentUser?.id || ''),
+          'x-user-uuid': String(currentUser?.uuid || ''),
+          'x-user-email': String(currentUser?.email || ''),
+          'x-user-name': currentUser?.name || 'User',
+          'Cache-Control': 'no-store'
+        }
+      });
+      if (res.ok && mountedRef.current) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setExplorePlaces(data);
+        }
+      }
     } catch (err) {
-      console.error('[App] fetchExploreAndTrips error:', err.message);
+      console.error('[App] fetchExplorePlaces error:', err.message);
     }
   }, [currentUser]);
+
+  // ─── FETCH TRAVEL TRIPS ───────────────────────────
+  const fetchTravelTrips = useCallback(async () => {
+    try {
+      const res = await fetch('/api/trips', {
+        headers: { 'Cache-Control': 'no-store' }
+      });
+      if (res.ok && mountedRef.current) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setTravelTrips(data);
+        }
+      }
+    } catch (err) {
+      console.error('[App] fetchTravelTrips error:', err.message);
+    }
+  }, []);
+
+  const fetchExploreAndTrips = useCallback(async () => {
+    fetchExplorePlaces();
+    fetchTravelTrips();
+  }, [fetchExplorePlaces, fetchTravelTrips]);
 
   // ─── INITIAL DATA LOAD (runs on mount and user change ONLY) ─
   useEffect(() => {
