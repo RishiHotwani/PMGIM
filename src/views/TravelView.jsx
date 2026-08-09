@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Car, MapPin, Calendar, Plus, MessageSquare, Check, X, Send } from 'lucide-react';
+import UserAvatar from '../components/UserAvatar';
 
 export default function TravelView({ trips = [], onLogAction, currentUser, onRefreshTrips }) {
   const [selectedFilter, setSelectedFilter] = useState('All');
@@ -27,6 +28,13 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
   });
 
   const filterOptions = ['All', 'Airport', 'Railway Station', 'Panjim'];
+
+  const getInitials = (name) => {
+    if (!name) return 'SU';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  };
 
   const filteredTrips = (displayTrips || []).filter((trip) => {
     if (selectedFilter === 'All') return true;
@@ -63,10 +71,13 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
   const handleCreateTrip = async (e) => {
     e.preventDefault();
     try {
+      const isAvatarUrl = currentUser?.avatar && (currentUser.avatar.startsWith('http://') || currentUser.avatar.startsWith('https://'));
+      const computedInitials = isAvatarUrl ? currentUser.avatar : getInitials(currentUser?.name);
+
       const payload = {
         ...newTrip,
         userName: currentUser?.name || 'Student User',
-        userInitials: currentUser?.avatar || 'SU',
+        userInitials: computedInitials,
         batchInfo: `${currentUser?.batch || 'PGDM 2026'} · ${currentUser?.section || 'Sec A'}`,
         userId: currentUser?.id || currentUser?.uuid || ''
       };
@@ -194,9 +205,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
                 {/* Top row: Avatar, Name, Batch, Status Pill */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 font-extrabold text-sm flex items-center justify-center border border-blue-200 shadow-sm">
-                      {trip.user_initials || 'AM'}
-                    </div>
+                    <UserAvatar user={{ name: trip.user_name, avatar: trip.user_initials }} className="w-12 h-12 text-sm" />
                     <div>
                       <h3 className="font-extrabold text-slate-900 text-sm leading-tight">
                         {trip.user_name}
