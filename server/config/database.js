@@ -13,6 +13,7 @@ export const memoryStore = {
   place_reviews: [],
   travel_trips: [],
   trip_participants: [],
+  trip_messages: [],
   user_activities: [],
   user_notifications: [],
   user_bookmarks: [],
@@ -352,6 +353,24 @@ export async function initDatabase() {
         UNIQUE KEY idx_trip_user (trip_id, user_id),
         INDEX idx_trip_id (trip_id),
         INDEX idx_user_id (user_id)
+      ) ENGINE=InnoDB;
+    `);
+
+    // 10b. Trip Messages Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trip_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        trip_id INT NOT NULL,
+        sender_user_id VARCHAR(255) NOT NULL,
+        sender_name VARCHAR(255) NOT NULL,
+        receiver_user_id VARCHAR(255) NULL,
+        message TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_trip_id (trip_id),
+        INDEX idx_sender_user_id (sender_user_id),
+        INDEX idx_receiver_user_id (receiver_user_id)
       ) ENGINE=InnoDB;
     `);
 
@@ -776,6 +795,26 @@ export async function query(sql, params = []) {
     const t = memoryStore.travel_trips.find(x => Number(x.id) === tid);
     if (t) t.seats_left = Math.max(0, (t.seats_left || 1) - 1);
     return { affectedRows: 1 };
+  }
+
+  if (lowerSql.includes('insert into trip_messages')) {
+    const newMsg = {
+      id: memoryStore.trip_messages.length + 1,
+      trip_id: Number(params[0]),
+      sender_user_id: String(params[1]),
+      sender_name: String(params[2]),
+      receiver_user_id: params[3] ? String(params[3]) : null,
+      message: String(params[4]),
+      is_read: false,
+      created_at: new Date().toISOString()
+    };
+    memoryStore.trip_messages.push(newMsg);
+    return { insertId: newMsg.id, affectedRows: 1 };
+  }
+
+  if (lowerSql.includes('select * from trip_messages')) {
+    const tid = Number(params[0]);
+    return memoryStore.trip_messages.filter(m => Number(m.trip_id) === tid);
   }
 
   if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips.filter(t => t.status !== 'CANCELLED');

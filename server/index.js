@@ -831,6 +831,91 @@ app.delete('/api/trips/:id/leave', async (req, res, next) => {
   }
 });
 
+// ----------------- RIDE MESSAGING ROUTES -----------------
+app.get('/api/trips/:id/messages', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const tripId = parseInt(id, 10);
+
+    if (isNaN(tripId)) {
+      return res.status(400).json({ success: false, message: 'Invalid trip ID.' });
+    }
+
+    const messages = await query(
+      'SELECT id, trip_id, sender_user_id, sender_name, receiver_user_id, message, is_read, created_at FROM trip_messages WHERE trip_id = ? ORDER BY id ASC',
+      [tripId]
+    );
+
+    res.json(messages);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/trips/:id/messages', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const tripId = parseInt(id, 10);
+    const { message } = req.body;
+
+    if (isNaN(tripId) || !message || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Trip ID and message text are required.' });
+    }
+
+    // Authenticated identity conventions from session or headers
+    const senderUserId = req.user?.id ? String(req.user.id) : (req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '');
+    const senderName = req.user?.name || req.headers['x-user-name'] || req.body.userName || 'Student User';
+
+    if (!senderUserId) {
+      return res.status(401).json({ success: false, message: 'Authentication required to send ride messages.' });
+    }
+
+    // Retrieve target trip details for host user id and trip title
+    const trips = await query('SELECT host_user_id, title FROM travel_trips WHERE id = ?', [tripId]);
+    const trip = trips[0] || { host_user_id: null, title: 'Ride' };
+    const receiverUserId = trip.host_user_id ? String(trip.host_user_id) : null;
+
+    const trimmedMsg = message.trim();
+
+    const result = await query(
+      'INSERT INTO trip_messages (trip_id, sender_user_id, sender_name, receiver_user_id, message) VALUES (?, ?, ?, ?, ?)',
+      [tripId, senderUserId, senderName, receiverUserId, trimmedMsg]
+    );
+
+    const newMessageObj = {
+      id: result.insertId,
+      trip_id: tripId,
+      sender_user_id: senderUserId,
+      sender_name: senderName,
+      receiver_user_id: receiverUserId,
+      message: trimmedMsg,
+      is_read: false,
+      created_at: new Date().toISOString()
+    };
+
+    // Create targeted notification for the ride host if sender is not the host
+    if (receiverUserId && receiverUserId !== senderUserId) {
+      await query(
+        'INSERT INTO user_notifications (user_id, type, title, message, entity_type, entity_id) VALUES (?, "TRIP_MESSAGE", ?, ?, "TRIP", ?)',
+        [
+          receiverUserId,
+          `💬 New message from ${senderName} on "${trip.title}"`,
+          `"${trimmedMsg.substring(0, 80)}${trimmedMsg.length > 80 ? '...' : ''}"`,
+          String(tripId)
+        ]
+      );
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Message sent successfully!',
+      data: newMessageObj
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ----------------- PRODUCT ANALYTICS & ADMIN DASHBOARD -----------------
 app.get('/api/admin/analytics', async (req, res, next) => {
   try {

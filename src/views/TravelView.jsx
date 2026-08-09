@@ -7,7 +7,9 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [joinedTrips, setJoinedTrips] = useState([]);
   const [messageModalTrip, setMessageModalTrip] = useState(null);
-  const [chatMessages, setChatMessages] = useState({});
+  const [activeMessages, setActiveMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const [newMessageText, setNewMessageText] = useState('');
   const [createdTrips, setCreatedTrips] = useState([]);
 
@@ -28,6 +30,75 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
     const parts = name.trim().split(' ');
     if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     return name.substring(0, 2).toUpperCase();
+  };
+
+  const fetchTripMessages = async (tripId) => {
+    if (!tripId) return;
+    setLoadingMessages(true);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/messages`, {
+        headers: {
+          'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
+          'x-user-name': currentUser?.name || 'Student'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveMessages(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch trip messages:', err);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  useEffect(() => {
+    if (messageModalTrip?.id) {
+      fetchTripMessages(messageModalTrip.id);
+    } else {
+      setActiveMessages([]);
+    }
+  }, [messageModalTrip]);
+
+  const handleSendMessage = async (tripId) => {
+    if (!newMessageText.trim() || sendingMessage) return;
+    const msgText = newMessageText.trim();
+    setSendingMessage(true);
+
+    try {
+      const res = await fetch(`/api/trips/${tripId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': String(currentUser?.id || currentUser?.uuid || '1'),
+          'x-user-name': currentUser?.name || 'Student User'
+        },
+        body: JSON.stringify({ message: msgText, userName: currentUser?.name || 'Student User' })
+      });
+
+      if (res.ok) {
+        const resData = await res.json();
+        const created = resData.data || {
+          id: Date.now(),
+          trip_id: tripId,
+          sender_user_id: String(currentUser?.id || currentUser?.uuid || '1'),
+          sender_name: currentUser?.name || 'Student User',
+          message: msgText,
+          created_at: new Date().toISOString()
+        };
+
+        setActiveMessages((prev) => [...prev, created]);
+        if (onLogAction) {
+          onLogAction('MESSAGE_TRIP', `Sent message to ride host for trip ID #${tripId}: "${msgText}"`);
+        }
+        setNewMessageText('');
+      }
+    } catch (err) {
+      console.error('Error sending ride message:', err);
+    } finally {
+      setSendingMessage(false);
+    }
   };
 
   // Merge createdTrips with backend trips (createdTrips priority, deduplicated by ID)
@@ -139,17 +210,6 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
     } catch (err) {
       console.error('Error posting trip:', err);
     }
-  };
-
-  const handleSendMessage = (tripId) => {
-    if (!newMessageText.trim()) return;
-    const existing = chatMessages[tripId] || [];
-    setChatMessages({
-      ...chatMessages,
-      [tripId]: [...existing, { sender: currentUser?.name || 'Suraj K', text: newMessageText, time: 'Just now' }]
-    });
-    onLogAction('MESSAGE_TRIP', `Sent message to ride host for trip ID #${tripId}: "${newMessageText}"`);
-    setNewMessageText('');
   };
 
   return (
@@ -433,39 +493,66 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="font-extrabold text-base text-slate-900">Chat with {messageModalTrip.user_name}</h3>
-                <p className="text-xs text-slate-500">{messageModalTrip.title}</p>
+                <p className="text-xs text-slate-500 truncate max-w-[280px]">{messageModalTrip.title}</p>
               </div>
               <button onClick={() => setMessageModalTrip(null)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="h-56 overflow-y-auto bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100 text-xs">
-              <div className="p-3 bg-blue-50 text-blue-900 rounded-2xl max-w-[85%]">
-                <p className="font-bold text-xs text-blue-700 mb-1">{messageModalTrip.user_name}</p>
-                <p>Hey! Feel free to join or ask any questions about the pickup time.</p>
-              </div>
-
-              {(chatMessages[messageModalTrip.id] || []).map((msg, i) => (
-                <div key={i} className="p-3 bg-white border border-slate-200 text-slate-800 rounded-2xl max-w-[85%] ml-auto text-right shadow-sm">
-                  <p className="font-bold text-[10px] text-slate-500 mb-1">{msg.sender}</p>
-                  <p>{msg.text}</p>
+            <div className="h-64 overflow-y-auto bg-slate-50/80 rounded-2xl p-4 space-y-3 border border-slate-100 text-xs">
+              {loadingMessages ? (
+                <div className="flex items-center justify-center h-full text-slate-400 font-medium">
+                  Loading chat history...
                 </div>
-              ))}
+              ) : activeMessages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center p-4 space-y-2">
+                  <MessageSquare className="w-8 h-8 text-slate-300 stroke-[1.5]" />
+                  <p className="font-bold text-slate-700 text-xs">No messages yet</p>
+                  <p className="text-[11px] text-slate-400">Ask the ride host about pickup point & timing!</p>
+                </div>
+              ) : (
+                activeMessages.map((msg) => {
+                  const currentUid = String(currentUser?.id || currentUser?.uuid || '');
+                  const isMe = currentUid ? String(msg.sender_user_id) === currentUid : msg.sender_name === currentUser?.name;
+                  const timeFormatted = msg.created_at
+                    ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : 'Just now';
+
+                  return (
+                    <div
+                      key={msg.id || Math.random()}
+                      className={`p-3 rounded-2xl max-w-[85%] text-xs shadow-sm space-y-1 ${
+                        isMe
+                          ? 'bg-blue-600 text-white ml-auto text-right rounded-br-none'
+                          : 'bg-white text-slate-800 border border-slate-200/80 mr-auto text-left rounded-bl-none'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3 text-[10px] opacity-80 font-bold mb-0.5">
+                        <span>{msg.sender_name}</span>
+                        <span className="font-normal text-[9px]">{timeFormatted}</span>
+                      </div>
+                      <p className="leading-relaxed font-medium">{msg.message}</p>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-1">
               <input
                 type="text"
                 placeholder="Type your message..."
                 value={newMessageText}
+                disabled={sendingMessage}
                 onChange={(e) => setNewMessageText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(messageModalTrip.id)}
-                className="flex-1 px-4 py-3 bg-slate-100 border border-slate-200 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-4 py-3 bg-slate-100 border border-slate-200 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               />
               <button
                 onClick={() => handleSendMessage(messageModalTrip.id)}
-                className="p-3 bg-blue-600 text-white rounded-2xl shadow-md hover:bg-blue-700 flex items-center justify-center"
+                disabled={sendingMessage || !newMessageText.trim()}
+                className="p-3 bg-blue-600 text-white rounded-2xl shadow-md hover:bg-blue-700 disabled:opacity-40 transition-all flex items-center justify-center shrink-0"
               >
                 <Send className="w-4 h-4" />
               </button>
