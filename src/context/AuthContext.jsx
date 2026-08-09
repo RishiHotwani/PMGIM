@@ -47,7 +47,11 @@ export function AuthProvider({ children }) {
       console.warn('Non-JSON response received:', text);
     }
     if (!res.ok) {
-      throw new Error(data.message || data.error || (res.status === 401 ? 'Invalid email or password.' : `${defaultErrorMsg} (Server HTTP ${res.status})`));
+      const serverMsg = data.message || data.error;
+      if (serverMsg) {
+        throw new Error(serverMsg);
+      }
+      throw new Error(`${defaultErrorMsg} (Server HTTP ${res.status})`);
     }
     return data;
   };

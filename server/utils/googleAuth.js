@@ -74,8 +74,21 @@ export async function verifyGoogleToken(idToken) {
     };
   } catch (err) {
     if (err.statusCode) throw err;
+
+    // Safely inspect token payload ONLY for diagnostic logging (never for auth)
+    try {
+      const parts = idToken.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8'));
+        console.warn(`[STAGE_FAIL: Google token verification] Diagnostic info - Token aud: "${payload.aud}", Configured Client ID: "${clientId}"`);
+        if (payload.aud !== clientId) {
+          console.error(`[GOOGLE_AUTH_MISMATCH] Token audience (${payload.aud}) does NOT match configured GOOGLE_CLIENT_ID (${clientId})`);
+        }
+      }
+    } catch (e) {}
+
     console.warn(`[STAGE_FAIL: Google token verification] Cryptographic verification failed: ${err.message}`);
-    const authErr = new Error('Google authentication verification failed. Invalid or expired token.');
+    const authErr = new Error(`Google authentication verification failed: ${err.message}`);
     authErr.statusCode = 401;
     throw authErr;
   }
