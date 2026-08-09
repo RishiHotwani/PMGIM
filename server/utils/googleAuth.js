@@ -55,15 +55,9 @@ export async function verifyGoogleToken(googleInput) {
     if (parts.length === 3) {
       const base64Url = parts[1];
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        Buffer.from(base64, 'base64')
-          .toString('utf-8')
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      const payload = JSON.parse(jsonPayload);
-      if (payload.email) {
+      const jsonStr = Buffer.from(base64, 'base64').toString('utf-8');
+      const payload = JSON.parse(jsonStr);
+      if (payload && payload.email) {
         return {
           googleId: payload.sub || payload.googleId || 'g_' + String(payload.email).replace(/[^a-zA-Z0-9]/g, ''),
           email: payload.email,
