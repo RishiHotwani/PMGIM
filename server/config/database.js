@@ -797,6 +797,20 @@ export async function query(sql, params = []) {
     return { affectedRows: 1 };
   }
 
+  if (lowerSql.includes('update travel_trips set')) {
+    const tid = Number(params[params.length - 1]);
+    const t = memoryStore.travel_trips.find(x => Number(x.id) === tid);
+    if (t) {
+      if (params[0] !== null) t.title = params[0];
+      if (params[1] !== null) t.destination = params[1];
+      if (params[2] !== null) t.pickup = params[2];
+      if (params[3] !== null) t.date_time = params[3];
+      if (params[4] !== null) t.cost = params[4];
+      if (params[5] !== null) t.description = params[5];
+    }
+    return { affectedRows: 1 };
+  }
+
   if (lowerSql.includes('insert into trip_messages')) {
     const newMsg = {
       id: memoryStore.trip_messages.length + 1,

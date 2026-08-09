@@ -767,6 +767,89 @@ app.post('/api/trips', async (req, res, next) => {
   }
 });
 
+app.patch('/api/trips/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const tripId = parseInt(id, 10);
+
+    if (isNaN(tripId)) {
+      return res.status(400).json({ success: false, message: 'Invalid trip ID.' });
+    }
+
+    const hostIdStr = req.user?.id
+      ? String(req.user.id)
+      : (req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '');
+
+    if (!hostIdStr) {
+      return res.status(401).json({ success: false, message: 'Authentication required to update ride.' });
+    }
+
+    const trips = await query('SELECT * FROM travel_trips WHERE id = ?', [tripId]);
+    if (trips.length === 0) {
+      return res.status(404).json({ success: false, message: 'Trip not found.' });
+    }
+
+    const trip = trips[0];
+    const isOwner = String(trip.host_user_id) === hostIdStr || req.user?.role === 'ADMIN' || req.user?.role === 'SUPER_ADMIN';
+
+    if (!isOwner) {
+      return res.status(403).json({ success: false, message: 'Forbidden. Only the ride host can update ride details.' });
+    }
+
+    const { title, destination, pickup, date_time, cost, description } = req.body;
+
+    const newTitle = title !== undefined ? title : trip.title;
+    const newDestination = destination !== undefined ? destination : (trip.destination || trip.title);
+    const newPickup = pickup !== undefined ? pickup : trip.pickup;
+    const newDateTime = date_time !== undefined ? date_time : trip.date_time;
+    const newCost = cost !== undefined ? cost : trip.cost;
+    const newDescription = description !== undefined ? description : trip.description;
+
+    await query(
+      `UPDATE travel_trips SET 
+       title = COALESCE(?, title), 
+       destination = COALESCE(?, destination), 
+       pickup = COALESCE(?, pickup), 
+       date_time = COALESCE(?, date_time), 
+       cost = COALESCE(?, cost), 
+       description = COALESCE(?, description) 
+       WHERE id = ?`,
+      [title || null, destination || null, pickup || null, date_time || null, cost || null, description || null, tripId]
+    );
+
+    // Targeted notification to existing joined participants
+    const participants = await query(
+      'SELECT DISTINCT user_id FROM trip_participants WHERE trip_id = ? AND status = "JOINED" AND user_id != ?',
+      [tripId, hostIdStr]
+    );
+
+    for (const p of participants) {
+      if (p.user_id) {
+        await query(
+          'INSERT INTO user_notifications (user_id, type, title, message, entity_type, entity_id) VALUES (?, "TRIP_UPDATE", ?, ?, "TRIP", ?)',
+          [
+            String(p.user_id),
+            `🚕 Ride Updated: ${newDestination}`,
+            `${trip.user_name || 'Host'} updated ride details for "${newTitle}". New drop-off: ${newDestination}`,
+            String(tripId)
+          ]
+        );
+      }
+    }
+
+    const updatedTrips = await query('SELECT * FROM travel_trips WHERE id = ?', [tripId]);
+    const updatedTrip = updatedTrips[0] || { ...trip, title: newTitle, destination: newDestination, pickup: newPickup, date_time: newDateTime, cost: newCost, description: newDescription };
+
+    res.json({
+      success: true,
+      message: 'Ride details updated successfully!',
+      data: updatedTrip
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // CONCURRENT JOIN WITH ROW LOCKING
 app.post('/api/trips/:id/join', async (req, res, next) => {
   try {

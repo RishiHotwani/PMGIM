@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Car, MapPin, Calendar, Plus, MessageSquare, Check, X, Send } from 'lucide-react';
+import { Users, Car, MapPin, Calendar, Plus, MessageSquare, Check, X, Send, Edit, Pencil } from 'lucide-react';
 import UserAvatar from '../components/UserAvatar';
 
 export default function TravelView({ trips = [], onLogAction, currentUser, onRefreshTrips, onAddTrip }) {
@@ -12,9 +12,12 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
   const [sendingMessage, setSendingMessage] = useState(false);
   const [newMessageText, setNewMessageText] = useState('');
   const [createdTrips, setCreatedTrips] = useState([]);
+  const [editingTrip, setEditingTrip] = useState(null);
+  const [updatingTrip, setUpdatingTrip] = useState(false);
 
   const [newTrip, setNewTrip] = useState({
     title: '',
+    destination: '',
     pickup: 'GIM Main Gate',
     date_time: 'Sat, 8 Aug · departs 5:30 AM',
     seats_total: 4,
@@ -176,6 +179,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
 
       const payload = {
         ...newTrip,
+        destination: newTrip.destination || newTrip.title,
         userName: currentUser?.name || 'Student User',
         userInitials: computedInitials,
         batchInfo: `${currentUser?.batch || 'PGDM 2026'} · ${currentUser?.section || 'Sec A'}`,
@@ -205,7 +209,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
           batch_info: payload.batchInfo,
           title: payload.title,
           pickup: payload.pickup,
-          destination: payload.title,
+          destination: payload.destination || payload.title,
           date_time: payload.date_time,
           seats_left: payload.seats_total,
           seats_total: payload.seats_total,
@@ -222,6 +226,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         setIsModalOpen(false);
         setNewTrip({
           title: '',
+          destination: '',
           pickup: 'GIM Main Gate',
           date_time: 'Sat, 8 Aug · departs 5:30 AM',
           seats_total: 4,
@@ -234,6 +239,50 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
       }
     } catch (err) {
       console.error('Error posting trip:', err);
+    }
+  };
+
+  const handleUpdateTrip = async (e) => {
+    e.preventDefault();
+    if (!editingTrip) return;
+    setUpdatingTrip(true);
+    try {
+      const res = await fetch(`/api/trips/${editingTrip.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
+          'x-user-name': currentUser?.name || 'Student'
+        },
+        body: JSON.stringify({
+          title: editingTrip.title,
+          destination: editingTrip.destination || editingTrip.title,
+          pickup: editingTrip.pickup,
+          date_time: editingTrip.date_time,
+          cost: editingTrip.cost,
+          description: editingTrip.description
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.data || editingTrip;
+        setCreatedTrips((prev) =>
+          prev.map((t) => (t.id === editingTrip.id ? { ...t, ...updated } : t))
+        );
+        if (onLogAction) {
+          onLogAction('UPDATE_TRIP', `Updated ride details for trip #${editingTrip.id}`);
+        }
+        if (onRefreshTrips) onRefreshTrips();
+        setEditingTrip(null);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || 'Could not update ride.');
+      }
+    } catch (err) {
+      console.error('Error updating trip:', err);
+    } finally {
+      setUpdatingTrip(false);
     }
   };
 
@@ -287,6 +336,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         {filteredTrips.map((trip) => {
           const isJoined = Boolean(trip.is_joined || joinedTrips.includes(trip.id));
           const isFull = trip.seats_left === 0 || trip.status === 'FULL';
+          const isHost = String(trip.host_user_id) === String(currentUser?.id || currentUser?.uuid || '');
 
           return (
             <div
@@ -308,22 +358,39 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
                     </div>
                   </div>
 
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      isJoined
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : isFull
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {isJoined ? 'Joined' : isFull ? 'Full' : trip.status || 'Active'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {isHost && (
+                      <button
+                        onClick={() => setEditingTrip({ ...trip })}
+                        title="Edit Ride Details"
+                        className="p-1.5 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-full transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        isJoined
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : isFull
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {isJoined ? 'Joined' : isFull ? 'Full' : trip.status || 'Active'}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Trip Title */}
+                {/* Trip Title & Destination */}
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 leading-snug">{trip.title}</h2>
+                  {trip.destination && (
+                    <p className="text-xs font-bold text-blue-600 flex items-center gap-1 mt-1">
+                      <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                      <span>To: {trip.destination}</span>
+                    </p>
+                  )}
                   <div className="mt-2 space-y-1 text-xs text-slate-600 font-medium">
                     <p className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
@@ -423,13 +490,25 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
 
             <form onSubmit={handleCreateTrip} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Destination / Title</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Ride Title</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Dabolim Airport Drop"
+                  placeholder="e.g. Early Morning Dabolim Cab Share"
                   value={newTrip.title}
                   onChange={(e) => setNewTrip({ ...newTrip, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Destination / Drop-off Location</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Dabolim Airport, MOPA, Panjim"
+                  value={newTrip.destination}
+                  onChange={(e) => setNewTrip({ ...newTrip, destination: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -513,6 +592,106 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
               >
                 Post Ride to Travel Board
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Trip Modal */}
+      {editingTrip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 p-6 relative space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-extrabold text-lg text-slate-900">Edit Ride Details</h3>
+                <p className="text-xs text-slate-500">Trip ID #{editingTrip.id}</p>
+              </div>
+              <button onClick={() => setEditingTrip(null)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateTrip} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Ride Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editingTrip.title || ''}
+                  onChange={(e) => setEditingTrip({ ...editingTrip, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Destination / Drop-off Location</label>
+                <input
+                  type="text"
+                  required
+                  value={editingTrip.destination || editingTrip.title || ''}
+                  onChange={(e) => setEditingTrip({ ...editingTrip, destination: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Pickup Location</label>
+                <input
+                  type="text"
+                  required
+                  value={editingTrip.pickup || ''}
+                  onChange={(e) => setEditingTrip({ ...editingTrip, pickup: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Departure Date & Time</label>
+                <input
+                  type="text"
+                  required
+                  value={editingTrip.date_time || ''}
+                  onChange={(e) => setEditingTrip({ ...editingTrip, date_time: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Cost per Person</label>
+                <input
+                  type="text"
+                  value={editingTrip.cost || ''}
+                  onChange={(e) => setEditingTrip({ ...editingTrip, cost: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Notes / Instructions</label>
+                <textarea
+                  rows="2"
+                  value={editingTrip.description || ''}
+                  onChange={(e) => setEditingTrip({ ...editingTrip, description: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTrip(null)}
+                  className="w-1/2 py-3 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingTrip}
+                  className="w-1/2 py-3 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {updatingTrip ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
