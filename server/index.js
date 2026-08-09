@@ -13,6 +13,7 @@ import authRouter from './modules/auth/auth.routes.js';
 import { globalRateLimiter } from './middleware/rateLimiter.js';
 import { globalErrorHandler } from './middleware/errorHandler.js';
 import { authenticateToken } from './middleware/authenticate.js';
+import { freePort } from './utils/freePort.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -892,6 +893,8 @@ app.get('*', (req, res) => {
 });
 
 app.use(globalErrorHandler);
+
+freePort(PORT);
 
 const server = app.listen(PORT, () => {
   console.log(`🚀 GoMove Express Server listening on http://localhost:${PORT}`);
