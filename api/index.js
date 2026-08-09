@@ -12,7 +12,10 @@ import { globalRateLimiter } from '../server/middleware/rateLimiter.js';
 import { globalErrorHandler } from '../server/middleware/errorHandler.js';
 import { authenticateToken } from '../server/middleware/authenticate.js';
 
+import { handleGoogleAuth } from '../server/modules/auth/auth.controller.js';
+
 const app = express();
+app.set('trust proxy', 1);
 
 const razorpayInstance = new Razorpay({
   key_id: ENV.RAZORPAY.KEY_ID,
@@ -51,6 +54,8 @@ app.use((req, res, next) => {
 
 initDatabase();
 
+app.post('/api/auth/google', handleGoogleAuth);
+app.post('/api/auth/google/callback', handleGoogleAuth);
 app.use('/api/auth', authRouter);
 app.use('/auth', authRouter);
 app.use('/users', authRouter);

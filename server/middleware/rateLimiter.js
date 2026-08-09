@@ -9,6 +9,7 @@ export const authRateLimiter = rateLimit({
   max: 20, // max 20 requests per IP per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: {
     success: false,
     message: 'Too many authentication attempts from this IP. Please try again after 15 minutes.'
@@ -23,6 +24,7 @@ export const globalRateLimiter = rateLimit({
   max: 100, // max 100 requests per minute
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: {
     success: false,
     message: 'Rate limit exceeded. Please slow down requests.'

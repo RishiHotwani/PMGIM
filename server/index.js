@@ -15,10 +15,13 @@ import { globalErrorHandler } from './middleware/errorHandler.js';
 import { authenticateToken } from './middleware/authenticate.js';
 import { freePort } from './utils/freePort.js';
 
+import { handleGoogleAuth } from './modules/auth/auth.controller.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = ENV.PORT || 5001;
 
 const razorpayInstance = new Razorpay({
@@ -60,6 +63,8 @@ app.use((req, res, next) => {
 
 initDatabase();
 
+app.post('/api/auth/google', handleGoogleAuth);
+app.post('/api/auth/google/callback', handleGoogleAuth);
 app.use('/api/auth', authRouter);
 app.use('/auth', authRouter);
 app.use('/users', authRouter);
