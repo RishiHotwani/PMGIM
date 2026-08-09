@@ -68,10 +68,33 @@ export default function GlobalSearchBar({
     }
   };
 
+  const handleSubmitSearch = (e) => {
+    if (e) e.preventDefault();
+    if (!query.trim()) return;
+
+    if (onLogAction) {
+      onLogAction('GLOBAL_SEARCH_SUBMIT', `Submitted search query: ${query}`);
+    }
+
+    setIsOpen(false);
+
+    // If query matches a rental vehicle (Activa, City, Verna, etc.) -> go to Rentals
+    if (matchedRentals.length > 0) {
+      if (setActiveTab) setActiveTab('rentals');
+    } else if (matchedPlaces.length > 0) {
+      if (setActiveTab) setActiveTab('explore');
+    } else if (matchedTrips.length > 0) {
+      if (setActiveTab) setActiveTab('travel');
+    } else {
+      // General search query -> navigate to explore or rentals
+      if (setActiveTab) setActiveTab('explore');
+    }
+  };
+
   return (
-    <div ref={containerRef} className="relative w-full max-w-2xl text-slate-900">
+    <div ref={containerRef} className="relative w-full max-w-2xl text-slate-900 z-30">
       {/* Search Input Box (Google Inspired Glass Bar) */}
-      <div className="relative flex items-center">
+      <form onSubmit={handleSubmitSearch} className="relative flex items-center">
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
           <Search className="w-5 h-5 text-blue-500" />
         </div>
@@ -80,6 +103,11 @@ export default function GlobalSearchBar({
           type="text"
           value={query}
           onFocus={() => setIsOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleSubmitSearch(e);
+            }
+          }}
           onChange={(e) => {
             setQuery(e.target.value);
             setIsOpen(true);
@@ -90,6 +118,7 @@ export default function GlobalSearchBar({
 
         {query && (
           <button
+            type="button"
             onClick={() => {
               setQuery('');
               setIsOpen(true);
@@ -99,7 +128,7 @@ export default function GlobalSearchBar({
             <X className="w-4 h-4" />
           </button>
         )}
-      </div>
+      </form>
 
       {/* Recommendations & App-wide Dropdown Menu */}
       {isOpen && (

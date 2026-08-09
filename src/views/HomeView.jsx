@@ -56,7 +56,13 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
   return (
     <div className="w-full px-4 sm:px-6 lg:px-12 py-6 space-y-8 pb-20">
       {/* Hero Banner with Global Search */}
-      <div className="w-full bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-6 md:p-10 text-white relative overflow-hidden shadow-2xl">
+      <div className="w-full bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-6 md:p-10 text-white relative overflow-visible shadow-2xl z-20">
+        {/* Decorative Background Effects (Clipped cleanly inside container) */}
+        <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
+          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-[500px] h-[500px] rounded-full bg-blue-600/20 blur-3xl" />
+          <div className="absolute bottom-0 right-1/4 -mb-16 w-[400px] h-[400px] rounded-full bg-indigo-500/20 blur-2xl" />
+        </div>
+
         <div className="relative z-10 max-w-4xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-bold backdrop-blur-md">
             <Zap className="w-3.5 h-3.5" />
@@ -71,7 +77,7 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
             Rent vehicles (Activa 6G, Honda City, Verna), split rides to Dabolim & Mopa Airport, and discover student-recommended beaches & cafes.
           </p>
 
-          <div className="pt-2 max-w-2xl">
+          <div className="pt-2 max-w-2xl relative z-30">
             <GlobalSearchBar
               rentals={rentals}
               places={places}
@@ -81,10 +87,6 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
             />
           </div>
         </div>
-
-        {/* Decorative Background Effects */}
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-[500px] h-[500px] rounded-full bg-blue-600/20 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 -mb-16 w-[400px] h-[400px] rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
       </div>
 
       {/* 4 Quick Action Cards Grid */}
