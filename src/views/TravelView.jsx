@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, Car, MapPin, Calendar, Plus, MessageSquare, Check, X, Send } from 'lucide-react';
 
-export default function TravelView({ trips, onLogAction, currentUser, onRefreshTrips }) {
+export default function TravelView({ trips = [], onLogAction, currentUser, onRefreshTrips }) {
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [joinedTrips, setJoinedTrips] = useState([]);
   const [messageModalTrip, setMessageModalTrip] = useState(null);
   const [chatMessages, setChatMessages] = useState({});
   const [newMessageText, setNewMessageText] = useState('');
+  const [displayTrips, setDisplayTrips] = useState(trips || []);
+
+  useEffect(() => {
+    if (trips) {
+      setDisplayTrips(trips);
+    }
+  }, [trips]);
 
   const [newTrip, setNewTrip] = useState({
     title: '',
@@ -21,9 +28,12 @@ export default function TravelView({ trips, onLogAction, currentUser, onRefreshT
 
   const filterOptions = ['All', 'Airport', 'Railway Station', 'Panjim'];
 
-  const filteredTrips = (trips || []).filter((trip) => {
+  const filteredTrips = (displayTrips || []).filter((trip) => {
     if (selectedFilter === 'All') return true;
-    return trip.title.toLowerCase().includes(selectedFilter.toLowerCase());
+    const titleMatch = (trip.title || '').toLowerCase().includes(selectedFilter.toLowerCase());
+    const destMatch = (trip.destination || '').toLowerCase().includes(selectedFilter.toLowerCase());
+    const pickupMatch = (trip.pickup || '').toLowerCase().includes(selectedFilter.toLowerCase());
+    return titleMatch || destMatch || pickupMatch;
   });
 
   const handleJoinTrip = async (tripId) => {
@@ -32,13 +42,16 @@ export default function TravelView({ trips, onLogAction, currentUser, onRefreshT
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': currentUser?.id || 1,
+          'x-user-id': String(currentUser?.id || currentUser?.uuid || 1),
           'x-user-name': currentUser?.name || 'Suraj K'
         },
         body: JSON.stringify({ userName: currentUser?.name || 'Suraj K' })
       });
       if (res.ok) {
-        setJoinedTrips([...joinedTrips, tripId]);
+        setJoinedTrips((prev) => [...prev, tripId]);
+        setDisplayTrips((prev) =>
+          prev.map((t) => (t.id === tripId ? { ...t, seats_left: Math.max(0, (t.seats_left || 1) - 1) } : t))
+        );
         onLogAction('JOIN_TRIP', `Joined ride share trip ID #${tripId}`);
         if (onRefreshTrips) onRefreshTrips();
       }
@@ -50,22 +63,50 @@ export default function TravelView({ trips, onLogAction, currentUser, onRefreshT
   const handleCreateTrip = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...newTrip,
+        userName: currentUser?.name || 'Student User',
+        userInitials: currentUser?.avatar || 'SU',
+        batchInfo: `${currentUser?.batch || 'PGDM 2026'} · ${currentUser?.section || 'Sec A'}`,
+        userId: currentUser?.id || currentUser?.uuid || ''
+      };
+
       const res = await fetch('/api/trips', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': currentUser?.id || 1,
-          'x-user-name': currentUser?.name || 'Suraj K'
+          'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
+          'x-user-name': currentUser?.name || 'User'
         },
-        body: JSON.stringify({
-          ...newTrip,
-          userName: currentUser?.name || 'Suraj K',
-          userInitials: currentUser?.avatar || 'SK',
-          batchInfo: `${currentUser?.batch || 'PGDM 2026'} · ${currentUser?.section || 'Sec A'}`
-        })
+        body: JSON.stringify(payload)
       });
+
       if (res.ok) {
-        onLogAction('POST_TRIP', `Posted new ride share: ${newTrip.title}`);
+        const data = await res.json();
+        const createdId = data.id || Date.now();
+
+        // Optimistically prepend created ride to UI
+        const createdRide = {
+          id: createdId,
+          host_user_id: currentUser?.id || currentUser?.uuid,
+          user_name: payload.userName,
+          user_initials: payload.userInitials,
+          batch_info: payload.batchInfo,
+          title: payload.title,
+          pickup: payload.pickup,
+          destination: payload.title,
+          date_time: payload.date_time,
+          seats_left: payload.seats_total,
+          seats_total: payload.seats_total,
+          vehicle_type: payload.vehicle_type,
+          cost: payload.cost,
+          description: payload.description,
+          status: 'ACTIVE'
+        };
+
+        setDisplayTrips((prev) => [createdRide, ...prev]);
+        setSelectedFilter('All'); // Reset filter to All so new ride is visible immediately!
+        if (onLogAction) onLogAction('POST_TRIP', `Posted new ride share: ${newTrip.title}`);
         setIsModalOpen(false);
         setNewTrip({
           title: '',
@@ -76,6 +117,7 @@ export default function TravelView({ trips, onLogAction, currentUser, onRefreshT
           cost: '₹500 each',
           description: ''
         });
+
         if (onRefreshTrips) onRefreshTrips();
       }
     } catch (err) {

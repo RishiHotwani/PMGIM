@@ -596,12 +596,13 @@ app.get('/api/explore', async (req, res, next) => {
       sql = `
         SELECT ep.id, ep.name, ep.category, ep.rating, ep.distance, ep.price, ep.image, 
                ep.description, ep.maps_url, ep.best_time, ep.est_cost, ep.pro_tips, 
-               IF(ub.id IS NOT NULL, TRUE, FALSE) AS is_bookmarked 
+               EXISTS(
+                 SELECT 1 FROM user_bookmarks ub 
+                 WHERE ub.place_id = ep.id 
+                   AND (ub.user_id = ? OR ub.user_id = ? OR ub.user_id = ?)
+               ) AS is_bookmarked 
         FROM explore_places ep 
-        LEFT JOIN user_bookmarks ub 
-               ON ep.id = ub.place_id AND (ub.user_id = ? OR ub.user_id = ? OR ub.user_id = ?) 
         WHERE ep.is_active = TRUE
-        GROUP BY ep.id
         ORDER BY ep.id ASC
       `;
       params = [userId || '0', userUuid || '0', userEmail || '0'];

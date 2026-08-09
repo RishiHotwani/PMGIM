@@ -706,6 +706,37 @@ export async function query(sql, params = []) {
   }
 
   if (lowerSql.includes('from rentals')) return memoryStore.rentals.filter(r => r.status !== 'DELETED');
+
+  if (lowerSql.includes('insert into travel_trips')) {
+    const newTrip = {
+      id: memoryStore.travel_trips.length + 1,
+      host_user_id: params[0],
+      user_name: params[1],
+      user_initials: params[2],
+      batch_info: params[3],
+      title: params[4],
+      destination: params[5],
+      pickup: params[6],
+      date_time: params[7],
+      seats_left: params[8],
+      seats_total: params[9],
+      vehicle_type: params[10],
+      cost: params[11],
+      description: params[12],
+      status: 'ACTIVE',
+      created_at: new Date().toISOString()
+    };
+    memoryStore.travel_trips.unshift(newTrip);
+    return { insertId: newTrip.id, affectedRows: 1 };
+  }
+
+  if (lowerSql.includes('update travel_trips set seats_left')) {
+    const tid = Number(params[0]);
+    const t = memoryStore.travel_trips.find(x => Number(x.id) === tid);
+    if (t) t.seats_left = Math.max(0, (t.seats_left || 1) - 1);
+    return { affectedRows: 1 };
+  }
+
   if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips.filter(t => t.status !== 'CANCELLED');
 
   return [];

@@ -195,7 +195,13 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
               </div>
             ))
           ) : (
-            <div className="text-center py-12 text-slate-400 col-span-full">Loading places...</div>
+            [1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-white rounded-3xl overflow-hidden border border-slate-100 p-4 space-y-3 animate-pulse">
+                <div className="h-44 bg-slate-200 rounded-2xl w-full" />
+                <div className="h-4 bg-slate-200 rounded w-3/4" />
+                <div className="h-3 bg-slate-100 rounded w-1/2" />
+              </div>
+            ))
           )}
         </div>
       </div>
