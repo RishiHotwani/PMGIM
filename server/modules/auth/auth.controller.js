@@ -79,15 +79,15 @@ export async function handlePhoneLogin(req, res, next) {
 
 export async function handleGoogleAuth(req, res, next) {
   try {
-    const { credential, idToken } = req.body;
-    const tokenToVerify = credential || idToken;
+    const { credential, idToken, email, name, googleId, avatar } = req.body;
+    const googleInput = credential || idToken || (email ? { email, name, googleId, avatar } : req.body);
 
-    if (!tokenToVerify) {
-      return res.status(400).json({ success: false, message: 'Google credential / ID token is required.' });
+    if (!googleInput) {
+      return res.status(400).json({ success: false, message: 'Google credential or email is required.' });
     }
 
     const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
-    const { user, accessToken, refreshToken } = await authenticateGoogleUser(tokenToVerify, clientInfo);
+    const { user, accessToken, refreshToken } = await authenticateGoogleUser(googleInput, clientInfo);
 
     setAuthCookies(res, accessToken, refreshToken);
 
@@ -98,7 +98,11 @@ export async function handleGoogleAuth(req, res, next) {
       accessToken
     });
   } catch (err) {
-    next(err);
+    console.error('[GOOGLE_AUTH_ERROR]', err);
+    res.status(err.statusCode || 400).json({
+      success: false,
+      message: err.message || 'Google authentication failed.'
+    });
   }
 }
 

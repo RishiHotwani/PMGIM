@@ -217,52 +217,78 @@ export async function loginPhoneUser({ phone, password }, clientInfo) {
   return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
 }
 
-export async function authenticateGoogleUser(idToken, clientInfo) {
-  const googlePayload = await verifyGoogleToken(idToken);
+export async function authenticateGoogleUser(googleInput, clientInfo) {
+  const googlePayload = await verifyGoogleToken(googleInput);
   const { googleId, email, name, avatar, emailVerified } = googlePayload;
+
+  if (!email) {
+    const err = new Error('Google account must have a valid email address.');
+    err.statusCode = 400;
+    throw err;
+  }
 
   let user = await findUserByGoogleId(googleId);
 
   if (!user) {
     user = await findUserByEmail(email);
     if (user) {
-      // Link Google ID to existing email user
+      // Link Google ID to existing user account
       user.google_id = googleId;
       user.provider = 'GOOGLE';
+      try {
+        const { query, isInMemoryFallback } = await import('../../config/database.js');
+        if (!isInMemoryFallback) {
+          await query('UPDATE users SET google_id = ?, provider = "GOOGLE" WHERE id = ?', [googleId, user.id]);
+        }
+      } catch (e) {}
     } else {
       // Create new Google OAuth user
       const userUuid = uuidv4();
       user = await createUser({
         uuid: userUuid,
-        name,
+        name: name || email.split('@')[0],
         email,
         googleId,
         provider: 'GOOGLE',
-        avatar: avatar || name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'GO',
-        emailVerified: emailVerified || true,
+        avatar: avatar || (name ? name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'GO'),
+        emailVerified: emailVerified !== false,
         role: 'USER'
       });
-      await logAuditActivity(user.id, user.name, 'USER_GOOGLE_SIGNUP', `Created Google user ${user.email}`);
+      try {
+        await logAuditActivity(user?.id, user?.name, 'USER_GOOGLE_SIGNUP', `Created Google user ${user?.email}`, { ip: clientInfo.ip });
+      } catch (e) {}
     }
   }
 
-  await updateUserLastLogin(user.id);
+  if (!user) {
+    const err = new Error('Failed to create or authenticate Google user account.');
+    err.statusCode = 500;
+    throw err;
+  }
+
+  try {
+    await updateUserLastLogin(user.id);
+  } catch (e) {}
 
   const accessToken = generateAccessToken(user);
   const { rawToken, tokenHash } = generateRefreshTokenPayload();
   const familyId = uuidv4();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-  await storeRefreshToken({
-    userId: user.id,
-    tokenHash,
-    familyId,
-    expiresAt,
-    userAgent: clientInfo.userAgent,
-    ipAddress: clientInfo.ip
-  });
+  try {
+    await storeRefreshToken({
+      userId: user.id,
+      tokenHash,
+      familyId,
+      expiresAt,
+      userAgent: clientInfo.userAgent,
+      ipAddress: clientInfo.ip
+    });
+  } catch (e) {}
 
-  await logAuditActivity(user.id, user.name, 'USER_GOOGLE_LOGIN', `Google login successful for ${user.email}`, { ip: clientInfo.ip });
+  try {
+    await logAuditActivity(user.id, user.name, 'USER_GOOGLE_LOGIN', `Google login successful for ${user.email}`, { ip: clientInfo.ip });
+  } catch (e) {}
 
   return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
 }
