@@ -1,74 +1,82 @@
+import { OAuth2Client } from 'google-auth-library';
 import { ENV } from '../config/env.js';
 
+let oauthClientInstance = null;
+
+function getOAuthClient() {
+  const clientId = ENV.GOOGLE.CLIENT_ID;
+  if (!clientId || !clientId.includes('.apps.googleusercontent.com')) {
+    console.error('[STAGE_FAIL: Google token verification] GOOGLE_CLIENT_ID missing or invalid in server environment.');
+    const err = new Error('Google OAuth Client ID is misconfigured on the server.');
+    err.statusCode = 500;
+    throw err;
+  }
+  if (!oauthClientInstance) {
+    oauthClientInstance = new OAuth2Client(clientId);
+  }
+  return { client: oauthClientInstance, clientId };
+}
+
 /**
- * Verify Google ID Token server-side safely using direct JWT payload parsing
- * or official Google Identity Services library fallback.
+ * Verify Google ID Token server-side using official Google Identity Services library.
+ * Performs cryptographic signature verification against Google public keys
+ * and validates audience (aud), issuer (iss), subject (sub), and email.
  */
-export async function verifyGoogleToken(googleInput) {
-  if (!googleInput) {
-    throw new Error('Google authentication credential is required');
+export async function verifyGoogleToken(idToken) {
+  if (!idToken || typeof idToken !== 'string') {
+    console.warn('[STAGE_FAIL: Google token verification] Invalid token input type or missing credential');
+    const err = new Error('Google ID token credential is required');
+    err.statusCode = 400;
+    throw err;
   }
 
-  // 1. Handle object input e.g. { email, name, googleId }
-  if (typeof googleInput === 'object' && googleInput !== null) {
-    const email = googleInput.email;
-    if (!email) throw new Error('Email is required for Google authentication');
+  const { client, clientId } = getOAuthClient();
+
+  try {
+    const ticket = await client.verifyIdToken({
+      idToken: idToken.trim(),
+      audience: clientId
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload) {
+      console.warn('[STAGE_FAIL: Google token verification] Google ticket returned empty payload');
+      const err = new Error('Invalid Google ID Token payload');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    // Validate expected Google Issuer
+    const validIssuers = ['accounts.google.com', 'https://accounts.google.com'];
+    if (!validIssuers.includes(payload.iss)) {
+      console.warn(`[STAGE_FAIL: Google token verification] Issuer mismatch: ${payload.iss}`);
+      const err = new Error('Google ID token issuer mismatch');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    // Validate required claims: sub & email
+    if (!payload.sub || !payload.email) {
+      console.warn('[STAGE_FAIL: Google token verification] Missing sub or email claims in payload');
+      const err = new Error('Google ID token missing required identity claims');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    const emailVerified = Boolean(payload.email_verified);
+
     return {
-      googleId: googleInput.googleId || googleInput.sub || 'g_' + String(email).replace(/[^a-zA-Z0-9]/g, ''),
-      email,
-      name: googleInput.name || googleInput.given_name || email.split('@')[0],
-      avatar: googleInput.avatar || googleInput.picture || (googleInput.name ? googleInput.name[0] : 'GO'),
-      emailVerified: true
+      googleId: payload.sub,
+      email: payload.email.toLowerCase().trim(),
+      name: payload.name || payload.given_name || payload.email.split('@')[0],
+      avatar: payload.picture || 'GO',
+      emailVerified
     };
-  }
-
-  const idToken = String(googleInput).trim();
-
-  // 2. Direct safe JWT payload parsing
-  try {
-    const parts = idToken.split('.');
-    if (parts.length === 3) {
-      const base64Url = parts[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonStr = Buffer.from(base64, 'base64').toString('utf-8');
-      const payload = JSON.parse(jsonStr);
-      if (payload && payload.email) {
-        return {
-          googleId: payload.sub || payload.googleId || 'g_' + String(payload.email).replace(/[^a-zA-Z0-9]/g, ''),
-          email: payload.email,
-          name: payload.name || payload.given_name || payload.email.split('@')[0],
-          avatar: payload.picture || 'GO',
-          emailVerified: payload.email_verified !== false
-        };
-      }
-    }
   } catch (err) {
-    console.warn('JWT direct decode warning:', err.message);
+    if (err.statusCode) throw err;
+    console.warn(`[STAGE_FAIL: Google token verification] Cryptographic verification failed: ${err.message}`);
+    const authErr = new Error('Google authentication verification failed. Invalid or expired token.');
+    authErr.statusCode = 401;
+    throw authErr;
   }
-
-  // 3. Lazy attempt with google-auth-library if Client ID is set
-  try {
-    if (ENV.GOOGLE.CLIENT_ID && ENV.GOOGLE.CLIENT_ID.includes('.apps.googleusercontent.com')) {
-      const { OAuth2Client } = await import('google-auth-library');
-      const client = new OAuth2Client(ENV.GOOGLE.CLIENT_ID);
-      const ticket = await client.verifyIdToken({
-        idToken,
-        audience: ENV.GOOGLE.CLIENT_ID
-      });
-      const payload = ticket.getPayload();
-      if (payload && payload.email) {
-        return {
-          googleId: payload.sub,
-          email: payload.email,
-          name: payload.name || payload.given_name || payload.email.split('@')[0],
-          avatar: payload.picture || 'GO',
-          emailVerified: payload.email_verified || true
-        };
-      }
-    }
-  } catch (err) {
-    console.warn('google-auth-library verification warning:', err.message);
-  }
-
-  throw new Error('Could not parse Google ID Token');
 }

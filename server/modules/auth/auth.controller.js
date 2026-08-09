@@ -80,45 +80,18 @@ export async function handlePhoneLogin(req, res, next) {
 export async function handleGoogleAuth(req, res, next) {
   try {
     const body = req.body || {};
-    let targetEmail = body.email;
-    let targetName = body.name;
-    let targetGoogleId = body.googleId;
-    let targetAvatar = body.avatar;
-
     const token = body.credential || body.idToken;
 
-    if (token) {
-      try {
-        const payload = await verifyGoogleToken(token);
-        if (payload && payload.email) {
-          targetEmail = payload.email;
-          targetName = payload.name || targetName;
-          targetGoogleId = payload.googleId || targetGoogleId;
-          targetAvatar = payload.avatar || targetAvatar;
-        }
-      } catch (tokErr) {
-        console.warn('Token verify warning, trying body fallback:', tokErr.message);
-      }
-    }
-
-    if (!targetEmail && body.email) {
-      targetEmail = body.email;
-      targetName = body.name;
-      targetGoogleId = body.googleId;
-    }
-
-    if (!targetEmail) {
+    if (!token || typeof token !== 'string') {
+      console.warn('[STAGE_FAIL: Google token verification] Request missing credential / idToken parameter');
       return res.status(400).json({
         success: false,
-        message: 'Google authentication requires email address or valid ID Token.'
+        message: 'Google authentication credential token is required.'
       });
     }
 
     const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
-    const { user, accessToken, refreshToken } = await authenticateGoogleUser(
-      { email: targetEmail, name: targetName, googleId: targetGoogleId, avatar: targetAvatar },
-      clientInfo
-    );
+    const { user, accessToken, refreshToken } = await authenticateGoogleUser(token, clientInfo);
 
     try {
       setAuthCookies(res, accessToken, refreshToken);
@@ -131,8 +104,9 @@ export async function handleGoogleAuth(req, res, next) {
       accessToken
     });
   } catch (err) {
-    console.error('[GOOGLE_AUTH_FATAL_ERROR]', err);
-    return res.status(err.statusCode || 400).json({
+    const statusCode = err.statusCode || 500;
+    console.error(`[GOOGLE_AUTH_CONTROLLER_ERROR] HTTP ${statusCode}: ${err.message}`);
+    return res.status(statusCode).json({
       success: false,
       message: err.message || 'Google authentication failed.'
     });
