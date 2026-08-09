@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
       console.warn('Non-JSON response received:', text);
     }
     if (!res.ok) {
-      throw new Error(data.message || (res.status === 401 ? 'Invalid email or password.' : `${defaultErrorMsg} (Server HTTP ${res.status})`));
+      throw new Error(data.message || data.error || (res.status === 401 ? 'Invalid email or password.' : `${defaultErrorMsg} (Server HTTP ${res.status})`));
     }
     return data;
   };
@@ -85,11 +85,15 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const loginWithGoogleToken = async (credentialToken, desiredRole = 'USER') => {
+  const loginWithGoogleToken = async (credentialInput, desiredRole = 'USER') => {
+    const payload = typeof credentialInput === 'string'
+      ? { credential: credentialInput, role: desiredRole }
+      : { ...credentialInput, role: desiredRole };
+
     const res = await fetch('/api/auth/google', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: credentialToken, role: desiredRole })
+      body: JSON.stringify(payload)
     });
     const data = await safeParseJson(res, 'Google authentication failed');
     setCurrentUser(data.user);

@@ -59,21 +59,15 @@ export default function AuthModal({ isOpen, onClose, currentUser, onLoginSuccess
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: account.email,
-          name: account.name,
-          googleId: 'google_oauth_' + account.email.replace(/[^a-zA-Z0-9]/g, '')
-        })
+      const data = await loginWithGoogleToken({
+        email: account.email,
+        name: account.name,
+        googleId: 'google_oauth_' + account.email.replace(/[^a-zA-Z0-9]/g, '')
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Google Sign-in failed');
-      if (onLoginSuccess) onLoginSuccess(data.user);
+      if (onLoginSuccess && data?.user) onLoginSuccess(data.user);
       onClose();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Google Sign-in failed');
     } finally {
       setLoading(false);
     }
