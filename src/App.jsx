@@ -12,6 +12,7 @@ import AdminAnalyticsView from './views/AdminAnalyticsView';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import * as rentalService from './services/rentalService';
 import { DEFAULT_EXPLORE_PLACES } from './data/defaultPlaces';
+import { DEFAULT_TRAVEL_TRIPS } from './data/defaultTrips';
 
 function MainAppContent() {
   const { currentUser, loading, logout, setCurrentUser } = useAuth();
@@ -21,7 +22,7 @@ function MainAppContent() {
   const [rentalsLoading, setRentalsLoading] = useState(true);
   const [rentalsError, setRentalsError] = useState(null);
   const [explorePlaces, setExplorePlaces] = useState(DEFAULT_EXPLORE_PLACES);
-  const [travelTrips, setTravelTrips] = useState([]);
+  const [travelTrips, setTravelTrips] = useState(DEFAULT_TRAVEL_TRIPS);
 
   // Ref to track if the component is mounted (prevent setState after unmount)
   const mountedRef = useRef(true);
@@ -80,12 +81,27 @@ function MainAppContent() {
       if (res.ok && mountedRef.current) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          setTravelTrips(data);
+          setTravelTrips((prev) => {
+            const map = new Map();
+            // Backend data first
+            data.forEach((t) => map.set(String(t.id), t));
+            // Preserve locally added trips if backend insert is propagating
+            (prev || []).forEach((t) => {
+              if (!map.has(String(t.id))) {
+                map.set(String(t.id), t);
+              }
+            });
+            return Array.from(map.values());
+          });
         }
       }
     } catch (err) {
       console.error('[App] fetchTravelTrips error:', err.message);
     }
+  }, []);
+
+  const handleAddTrip = useCallback((newTrip) => {
+    setTravelTrips((prev) => [newTrip, ...prev.filter((t) => String(t.id) !== String(newTrip.id))]);
   }, []);
 
   const fetchExploreAndTrips = useCallback(async () => {
@@ -249,6 +265,7 @@ function MainAppContent() {
               onLogAction={handleLogAction}
               currentUser={currentUser}
               onRefreshTrips={fetchExploreAndTrips}
+              onAddTrip={handleAddTrip}
             />
           )}
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Car, MapPin, Calendar, Plus, MessageSquare, Check, X, Send } from 'lucide-react';
 import UserAvatar from '../components/UserAvatar';
 
-export default function TravelView({ trips = [], onLogAction, currentUser, onRefreshTrips }) {
+export default function TravelView({ trips = [], onLogAction, currentUser, onRefreshTrips, onAddTrip }) {
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [joinedTrips, setJoinedTrips] = useState([]);
@@ -120,6 +120,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         };
 
         setCreatedTrips((prev) => [createdRide, ...prev]);
+        if (onAddTrip) onAddTrip(createdRide); // Persist trip to top-level App state!
         setSelectedFilter('All'); // Reset filter to All so new ride is visible immediately!
         if (onLogAction) onLogAction('POST_TRIP', `Posted new ride share: ${newTrip.title}`);
         setIsModalOpen(false);
