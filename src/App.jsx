@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import HomeView from './views/HomeView';
@@ -10,6 +10,7 @@ import AuthGateView from './views/AuthGateView';
 import VendorPortalView from './views/VendorPortalView';
 import AdminAnalyticsView from './views/AdminAnalyticsView';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import * as rentalService from './services/rentalService';
 
 function MainAppContent() {
   const { currentUser, loading, logout, setCurrentUser } = useAuth();
@@ -17,37 +18,71 @@ function MainAppContent() {
 
   const [rentals, setRentals] = useState([]);
   const [rentalsLoading, setRentalsLoading] = useState(true);
+  const [rentalsError, setRentalsError] = useState(null);
   const [explorePlaces, setExplorePlaces] = useState([]);
   const [travelTrips, setTravelTrips] = useState([]);
 
-  // Fetch initial data
-  const fetchData = async () => {
+  // Ref to track if the component is mounted (prevent setState after unmount)
+  const mountedRef = useRef(true);
+
+  // ─── DEDICATED RENTAL FETCH (race-safe via rentalService) ───
+  const refreshRentals = useCallback(async () => {
     try {
       setRentalsLoading(true);
-      const [rRes, eRes, tRes] = await Promise.all([
-        fetch('/api/rentals'),
+      setRentalsError(null);
+      const data = await rentalService.fetchAllRentals();
+      // data is null if the request was aborted/superseded — ignore
+      if (data !== null && mountedRef.current) {
+        setRentals(data);
+      }
+    } catch (err) {
+      if (mountedRef.current) {
+        setRentalsError(err.message);
+        console.error('[App] refreshRentals error:', err.message);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setRentalsLoading(false);
+      }
+    }
+  }, []);
+
+  // ─── FETCH EXPLORE + TRIPS (separate from rentals) ──────────
+  const fetchExploreAndTrips = useCallback(async () => {
+    try {
+      const [eRes, tRes] = await Promise.all([
         fetch('/api/explore', {
           headers: {
-            'x-user-id': currentUser?.id || '',
-            'x-user-name': currentUser?.name || 'User'
+            'x-user-id': String(currentUser?.id || ''),
+            'x-user-uuid': String(currentUser?.uuid || ''),
+            'x-user-email': String(currentUser?.email || ''),
+            'x-user-name': currentUser?.name || 'User',
+            'Cache-Control': 'no-store'
           }
         }),
-        fetch('/api/trips')
+        fetch('/api/trips', {
+          headers: { 'Cache-Control': 'no-store' }
+        })
       ]);
 
-      if (rRes.ok) setRentals(await rRes.json());
-      if (eRes.ok) setExplorePlaces(await eRes.json());
-      if (tRes.ok) setTravelTrips(await tRes.json());
+      if (eRes.ok && mountedRef.current) setExplorePlaces(await eRes.json());
+      if (tRes.ok && mountedRef.current) setTravelTrips(await tRes.json());
     } catch (err) {
-      console.error('API fetch error:', err);
-    } finally {
-      setRentalsLoading(false);
+      console.error('[App] fetchExploreAndTrips error:', err.message);
     }
-  };
+  }, [currentUser]);
 
+  // ─── INITIAL DATA LOAD (runs on mount and user change ONLY) ─
   useEffect(() => {
-    fetchData();
-  }, [currentUser, activeTab]);
+    mountedRef.current = true;
+    refreshRentals();
+    fetchExploreAndTrips();
+
+    return () => {
+      mountedRef.current = false;
+      rentalService.abortAll(); // Cancel any in-flight rental requests on unmount
+    };
+  }, [currentUser]);
 
   // Log user action to backend
   const handleLogAction = async (type, description, details = '') => {
@@ -72,15 +107,15 @@ function MainAppContent() {
     }
   };
 
+  // ─── TAB CHANGE (NO fetchData call — no double-fetch) ───────
   const handleTabChange = (newTab) => {
     handleLogAction('SWITCH_TAB', `Switched active tab to: ${newTab}`);
     setActiveTab(newTab);
-    fetchData();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleToggleBookmark = async (id) => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id && !currentUser?.uuid && !currentUser?.email) return;
 
     // Optimistic UI update
     setExplorePlaces((prev) =>
@@ -91,8 +126,10 @@ function MainAppContent() {
       const res = await fetch(`/api/bookmarks/${id}/toggle`, {
         method: 'POST',
         headers: {
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name || 'User'
+          'x-user-id': String(currentUser?.id || ''),
+          'x-user-uuid': String(currentUser?.uuid || ''),
+          'x-user-email': String(currentUser?.email || ''),
+          'x-user-name': currentUser?.name || 'User'
         }
       });
       if (res.ok) {
@@ -148,6 +185,8 @@ function MainAppContent() {
               setActiveTab={handleTabChange}
               onLogAction={handleLogAction}
               places={explorePlaces}
+              rentals={rentals}
+              trips={travelTrips}
             />
           )}
 
@@ -155,17 +194,18 @@ function MainAppContent() {
             <RentalsView
               rentals={rentals}
               loading={rentalsLoading}
+              error={rentalsError}
               onLogAction={handleLogAction}
               currentUser={currentUser}
-              onRefresh={fetchData}
-              onRefreshRentals={fetchData}
+              onRefresh={refreshRentals}
+              onRefreshRentals={refreshRentals}
             />
           )}
 
           {activeTab === 'vendor_portal' && (
             <VendorPortalView
               currentUser={currentUser}
-              onRefreshRentals={fetchData}
+              onRefreshRentals={refreshRentals}
             />
           )}
 
@@ -187,7 +227,7 @@ function MainAppContent() {
               trips={travelTrips}
               onLogAction={handleLogAction}
               currentUser={currentUser}
-              onRefreshTrips={fetchData}
+              onRefreshTrips={fetchExploreAndTrips}
             />
           )}
 

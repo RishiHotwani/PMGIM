@@ -524,14 +524,17 @@ app.patch('/api/notifications/read-all', async (req, res, next) => {
 // ----------------- PRIVATE BOOKMARKS ROUTES -----------------
 app.get('/api/bookmarks', async (req, res, next) => {
   try {
-    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null;
-    if (!userId) return res.json([]);
+    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
+    const userUuid = req.headers['x-user-uuid'] ? String(req.headers['x-user-uuid']).trim() : '';
+    const userEmail = req.headers['x-user-email'] ? String(req.headers['x-user-email']).trim() : '';
+    const targetId = userId || userUuid || userEmail;
+    if (!targetId) return res.json([]);
     
     const bookmarks = await query(
-      `SELECT ep.* FROM explore_places ep 
+      `SELECT DISTINCT ep.* FROM explore_places ep 
        INNER JOIN user_bookmarks ub ON ep.id = ub.place_id 
-       WHERE ub.user_id = ? ORDER BY ub.id DESC`,
-      [userId]
+       WHERE (ub.user_id = ? OR ub.user_id = ? OR ub.user_id = ?) ORDER BY ub.id DESC`,
+      [userId || '0', userUuid || '0', userEmail || '0']
     );
     res.json(bookmarks);
   } catch (err) {
@@ -542,19 +545,28 @@ app.get('/api/bookmarks', async (req, res, next) => {
 app.post('/api/bookmarks/:placeId/toggle', async (req, res, next) => {
   try {
     const placeId = parseInt(req.params.placeId, 10);
-    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null;
+    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
+    const userUuid = req.headers['x-user-uuid'] ? String(req.headers['x-user-uuid']).trim() : '';
+    const userEmail = req.headers['x-user-email'] ? String(req.headers['x-user-email']).trim() : '';
+    const targetId = userId || userUuid || userEmail;
 
-    if (!userId || isNaN(placeId)) {
+    if (!targetId || isNaN(placeId)) {
       return res.status(400).json({ success: false, message: 'Log in required to bookmark places.' });
     }
 
-    const existing = await query('SELECT * FROM user_bookmarks WHERE user_id = ? AND place_id = ?', [userId, placeId]);
+    const existing = await query(
+      'SELECT * FROM user_bookmarks WHERE (user_id = ? OR user_id = ? OR user_id = ?) AND place_id = ?',
+      [userId || '0', userUuid || '0', userEmail || '0', placeId]
+    );
 
     if (existing.length > 0) {
-      await query('DELETE FROM user_bookmarks WHERE user_id = ? AND place_id = ?', [userId, placeId]);
+      await query(
+        'DELETE FROM user_bookmarks WHERE (user_id = ? OR user_id = ? OR user_id = ?) AND place_id = ?',
+        [userId || '0', userUuid || '0', userEmail || '0', placeId]
+      );
       res.json({ success: true, isBookmarked: false, message: 'Removed from private bookmarks.' });
     } else {
-      await query('INSERT INTO user_bookmarks (user_id, place_id) VALUES (?, ?)', [userId, placeId]);
+      await query('INSERT INTO user_bookmarks (user_id, place_id) VALUES (?, ?)', [targetId, placeId]);
       res.json({ success: true, isBookmarked: true, message: 'Added to private bookmarks.' });
     }
   } catch (err) {
@@ -565,7 +577,11 @@ app.post('/api/bookmarks/:placeId/toggle', async (req, res, next) => {
 // ----------------- EXPLORE PLACES & REVIEWS ROUTES -----------------
 app.get('/api/explore', async (req, res, next) => {
   try {
-    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null;
+    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
+    const userUuid = req.headers['x-user-uuid'] ? String(req.headers['x-user-uuid']).trim() : '';
+    const userEmail = req.headers['x-user-email'] ? String(req.headers['x-user-email']).trim() : '';
+    const targetId = userId || userUuid || userEmail;
+
     let sql = `
       SELECT ep.id, ep.name, ep.category, ep.rating, ep.distance, ep.price, ep.image, 
              ep.description, ep.maps_url, ep.best_time, ep.est_cost, ep.pro_tips, 
@@ -576,18 +592,19 @@ app.get('/api/explore', async (req, res, next) => {
     `;
     let params = [];
 
-    if (userId) {
+    if (targetId) {
       sql = `
         SELECT ep.id, ep.name, ep.category, ep.rating, ep.distance, ep.price, ep.image, 
                ep.description, ep.maps_url, ep.best_time, ep.est_cost, ep.pro_tips, 
                IF(ub.id IS NOT NULL, TRUE, FALSE) AS is_bookmarked 
         FROM explore_places ep 
         LEFT JOIN user_bookmarks ub 
-               ON ep.id = ub.place_id AND ub.user_id = ? 
+               ON ep.id = ub.place_id AND (ub.user_id = ? OR ub.user_id = ? OR ub.user_id = ?) 
         WHERE ep.is_active = TRUE
+        GROUP BY ep.id
         ORDER BY ep.id ASC
       `;
-      params = [userId];
+      params = [userId || '0', userUuid || '0', userEmail || '0'];
     }
 
     const places = await query(sql, params);
@@ -876,5 +893,5 @@ app.get('*', (req, res) => {
 app.use(globalErrorHandler);
 
 app.listen(PORT, () => {
-  console.log(`🚀 BeyondGoa Express Server listening on http://localhost:${PORT}`);
+  console.log(`🚀 GoMove Express Server listening on http://localhost:${PORT}`);
 });

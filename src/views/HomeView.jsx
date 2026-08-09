@@ -1,8 +1,8 @@
 import React from 'react';
-import SearchBar from '../components/SearchBar';
+import GlobalSearchBar from '../components/GlobalSearchBar';
 import { Bike, Users, MapPin, Luggage, Star, ArrowRight, Navigation, Zap } from 'lucide-react';
 
-export default function HomeView({ currentUser, setActiveTab, onLogAction, places }) {
+export default function HomeView({ currentUser, setActiveTab, onLogAction, places = [], rentals = [], trips = [] }) {
   const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Student';
 
   const quickCards = [
@@ -53,18 +53,14 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
     setActiveTab(card.tab);
   };
 
-  const handleSearchFocus = () => {
-    onLogAction('SEARCH_FOCUS', 'User clicked main search bar on homepage');
-  };
-
   return (
     <div className="w-full px-4 sm:px-6 lg:px-12 py-6 space-y-8 pb-20">
-      {/* Hero Banner with Search */}
+      {/* Hero Banner with Global Search */}
       <div className="w-full bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-6 md:p-10 text-white relative overflow-hidden shadow-2xl">
         <div className="relative z-10 max-w-4xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-bold backdrop-blur-md">
             <Zap className="w-3.5 h-3.5" />
-            <span>Goa Institute of Management Campus Mobility</span>
+            <span>GoMove • Campus Mobility & Exploration</span>
           </div>
 
           <h1 className="text-2xl sm:text-3xl md:text-5xl font-extrabold leading-tight tracking-tight">
@@ -72,13 +68,16 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
           </h1>
 
           <p className="text-slate-300 text-xs md:text-base leading-relaxed max-w-2xl">
-            Rent scooters, split rides to Dabolim Airport & Mopa, explore student-voted beaches and cafes, all in one place.
+            Rent vehicles (Activa 6G, Honda City, Verna), split rides to Dabolim & Mopa Airport, and discover student-recommended beaches & cafes.
           </p>
 
           <div className="pt-2 max-w-2xl">
-            <SearchBar
-              placeholder="Search Activa, Arambol beach, Airport cabs, cafes..."
-              onFocus={handleSearchFocus}
+            <GlobalSearchBar
+              rentals={rentals}
+              places={places}
+              trips={trips}
+              setActiveTab={setActiveTab}
+              onLogAction={onLogAction}
             />
           </div>
         </div>

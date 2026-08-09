@@ -17,19 +17,25 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
   // Sync bookmarks from places prop (real-time single source of truth)
   useEffect(() => {
     if (places && places.length > 0) {
-      const saved = places.filter((p) => Boolean(p.is_bookmarked));
-      setBookmarks(saved);
-      setLoading(false);
+      const saved = places.filter((p) => Boolean(p.is_bookmarked) && p.is_bookmarked !== '0' && p.is_bookmarked !== 0);
+      if (saved.length > 0) {
+        setBookmarks(saved);
+        setLoading(false);
+      }
     }
   }, [places]);
 
   const fetchPrivateBookmarks = async () => {
-    if (!currentUser?.id) return;
+    const targetId = currentUser?.id || currentUser?.uuid || currentUser?.email;
+    if (!targetId) return;
     try {
       const res = await fetch('/api/bookmarks', {
         headers: {
-          'x-user-id': currentUser.id,
-          'x-user-name': currentUser.name || 'User'
+          'x-user-id': String(currentUser?.id || ''),
+          'x-user-uuid': String(currentUser?.uuid || ''),
+          'x-user-email': String(currentUser?.email || ''),
+          'x-user-name': currentUser?.name || 'User',
+          'Cache-Control': 'no-store'
         }
       });
       if (res.ok) {
@@ -44,7 +50,7 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
   };
 
   useEffect(() => {
-    if (currentUser?.id) {
+    if (currentUser?.id || currentUser?.uuid || currentUser?.email) {
       fetchPrivateBookmarks();
     }
   }, [currentUser]);

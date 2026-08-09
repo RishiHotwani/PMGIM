@@ -70,11 +70,11 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
             className="flex items-center gap-3 group text-left focus:outline-none"
           >
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-500 text-white flex items-center justify-center font-black text-xl shadow-md shadow-blue-500/25 group-hover:scale-105 group-active:scale-95 transition-all duration-300 border border-white/40">
-              BG
+              GM
             </div>
             <div>
               <span className="font-black text-slate-900 text-lg tracking-tight block leading-tight">
-                Beyond<span className="text-blue-600">Goa</span>
+                Go<span className="text-blue-600">Move</span>
               </span>
               <span className="text-[10px] font-bold text-slate-400 block -mt-0.5 tracking-wide uppercase">
                 Campus Mobility

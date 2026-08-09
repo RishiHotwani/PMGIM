@@ -1,15 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PlusCircle, Bike, Car, Shield, Trash2, CheckCircle2, XCircle, DollarSign, MapPin, Tag, Loader2, AlertTriangle } from 'lucide-react';
+import * as rentalService from '../services/rentalService';
 
 export default function VendorPortalView({ currentUser, onRefreshRentals }) {
   const [fleet, setFleet] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fleetError, setFleetError] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   
-  // Explicit Vehicle Saving State Machine: idle | saving | verifying | success | error
+  // Vehicle Saving State Machine: idle | saving | success | error
   const [vehicleSaveStatus, setVehicleSaveStatus] = useState('idle');
   const [saveErrorMessage, setSaveErrorMessage] = useState('');
   const [msg, setMsg] = useState('');
+
+  // Guard against double-submit
+  const isSubmittingRef = useRef(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -23,22 +28,31 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
     location: 'Sanquelim / Campus Gate'
   });
 
-  const getAuthHeaders = () => ({
-    'x-user-id': currentUser?.id || currentUser?.uuid || '',
-    'x-user-name': currentUser?.name || 'Vendor'
-  });
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      category: 'Bike',
+      price_per_day: '',
+      fuel: 'Petrol',
+      transmission: 'Manual',
+      tags: 'Verified Vendor',
+      image: '',
+      description: '',
+      location: 'Sanquelim / Campus Gate'
+    });
+  };
 
+  // ─── FETCH VENDOR FLEET (race-safe via rentalService) ──────
   const fetchMyFleet = async () => {
     try {
-      const res = await fetch('/api/rentals/vendor', {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
+      setFleetError(null);
+      const data = await rentalService.fetchVendorFleet(currentUser);
+      if (data !== null) {
         setFleet(data);
       }
     } catch (err) {
-      console.error('Fetch fleet error:', err);
+      console.error('[VendorPortal] fetchMyFleet error:', err.message);
+      setFleetError(err.message);
     } finally {
       setLoading(false);
     }
@@ -48,160 +62,86 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
     fetchMyFleet();
   }, [currentUser]);
 
-  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  // Verification Step 1: Verify in Vendor Fleet Listing
-  const verifyVehicleInVendorListings = async (createdVehicleId) => {
-    const delays = [0, 500, 1000, 1500];
-    for (let i = 0; i < delays.length; i++) {
-      if (delays[i] > 0) await delay(delays[i]);
-      try {
-        console.log(`[VEHICLE_VENDOR_FETCH] Attempt ${i + 1} for ID ${createdVehicleId}`);
-        const res = await fetch('/api/rentals/vendor', { headers: getAuthHeaders() });
-        if (res.ok) {
-          const list = await res.json();
-          const match = list.some((v) => String(v.id) === String(createdVehicleId));
-          if (match) {
-            console.log(`[VEHICLE_FRONTEND_VERIFY] Found in vendor listings on attempt ${i + 1}`);
-            setFleet(list); // Update authoritative state directly from verified database query
-            return true;
-          }
-        }
-      } catch (err) {
-        console.warn(`Vendor listing verify error attempt ${i + 1}:`, err);
-      }
-    }
-    return false;
-  };
-
-  // Verification Step 2: Verify in Public Rentals Catalog
-  const verifyVehicleInPublicRentals = async (createdVehicleId) => {
-    const delays = [0, 500, 1000, 1500];
-    for (let i = 0; i < delays.length; i++) {
-      if (delays[i] > 0) await delay(delays[i]);
-      try {
-        console.log(`[VEHICLE_PUBLIC_FETCH] Attempt ${i + 1} for ID ${createdVehicleId}`);
-        const res = await fetch('/api/rentals');
-        if (res.ok) {
-          const list = await res.json();
-          const match = list.some((v) => String(v.id) === String(createdVehicleId));
-          if (match) {
-            console.log(`[VEHICLE_PUBLIC_FETCH_RESULT] Found in public rentals on attempt ${i + 1}`);
-            return true;
-          }
-        }
-      } catch (err) {
-        console.warn(`Public rental verify error attempt ${i + 1}:`, err);
-      }
-    }
-    return false;
-  };
-
+  // ─── CREATE VEHICLE (database-first, no polling) ───────────
   const handlePostVehicle = async (e) => {
     e.preventDefault();
-    if (vehicleSaveStatus === 'saving' || vehicleSaveStatus === 'verifying') return;
+
+    // Prevent double-submit
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
 
     setVehicleSaveStatus('saving');
     setSaveErrorMessage('');
     setMsg('');
 
-    console.log('[VEHICLE_CREATE_START]', formData);
-
     try {
-      // STEP 1: POST TO BACKEND AND WAIT FOR MYSQL COMMIT
-      const res = await fetch('/api/rentals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
-        body: JSON.stringify(formData)
+      // STEP 1: POST to backend → MySQL INSERT → verify → return DB record
+      const result = await rentalService.createRental(currentUser, formData);
+      
+      console.log('[VendorPortal] Vehicle created:', {
+        id: result.vehicle.id,
+        title: result.vehicle.title
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        const errorMsg = data.message || data.error?.message || 'Failed to save vehicle on server.';
-        throw new Error(errorMsg);
+      // STEP 2: Refresh vendor fleet from database (race-safe)
+      const freshFleet = await rentalService.fetchVendorFleet(currentUser);
+      if (freshFleet !== null) {
+        setFleet(freshFleet);
+
+        // Verify the vehicle exists in the fresh fleet
+        const verified = freshFleet.some(v => String(v.id) === String(result.vehicle.id));
+        if (!verified) {
+          throw new Error('Vehicle was saved but could not be found in your fleet. Please refresh.');
+        }
       }
 
-      const createdVehicle = data.rental || data.data;
-      if (!createdVehicle || !createdVehicle.id) {
-        throw new Error('Server returned invalid vehicle payload without database ID.');
-      }
-
-      console.log('[VEHICLE_CREATE_AUTH_SUCCESS]', { createdVehicleId: createdVehicle.id });
-
-      // STEP 2: VERIFY VENDOR DATABASE RECORD
-      setVehicleSaveStatus('verifying');
-
-      const vendorVerified = await verifyVehicleInVendorListings(createdVehicle.id);
-      if (!vendorVerified) {
-        throw new Error('Vehicle saved, but could not be verified in your vendor fleet listing after 4 retries.');
-      }
-
-      // STEP 3: VERIFY PUBLIC RENTAL RECORD
-      const publicVerified = await verifyVehicleInPublicRentals(createdVehicle.id);
-      if (!publicVerified) {
-        throw new Error('Vehicle saved, but could not be verified in public rentals catalog after 4 retries.');
-      }
-
-      // STEP 4: REFRESH AUTHORITATIVE DATA FOR PUBLIC VIEWS
-      console.log('[VEHICLE_FINAL_SUCCESS]', { createdVehicleId: createdVehicle.id });
+      // STEP 3: Refresh public rentals in App.jsx (race-safe)
       if (onRefreshRentals) await onRefreshRentals();
 
-      // STEP 5: SUCCESS STATE & CLOSE MODAL ONLY AFTER CONFIRMATION
+      // STEP 4: Success
       setVehicleSaveStatus('success');
-      setMsg(`Vehicle "${createdVehicle.title}" successfully verified in database and published for all users!`);
+      setMsg(`Vehicle "${result.vehicle.title}" verified in database and published for all users!`);
 
-      await delay(1200);
-      setShowAddModal(false);
-      setVehicleSaveStatus('idle');
-      setFormData({
-        title: '',
-        category: 'Bike',
-        price_per_day: '',
-        fuel: 'Petrol',
-        transmission: 'Manual',
-        tags: 'Verified Vendor',
-        image: '',
-        description: '',
-        location: 'Sanquelim / Campus Gate'
-      });
+      // Auto-close modal after brief success display
+      setTimeout(() => {
+        setShowAddModal(false);
+        setVehicleSaveStatus('idle');
+        resetForm();
+      }, 1200);
+
     } catch (err) {
-      console.error('[VEHICLE_CREATE_ERROR]', err);
+      console.error('[VendorPortal] createVehicle error:', err.message);
       setVehicleSaveStatus('error');
-      setSaveErrorMessage(err.message || 'Vehicle could not be safely saved. Please try again.');
+      setSaveErrorMessage(err.message || 'Vehicle could not be saved. Please try again.');
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
+  // ─── TOGGLE AVAILABILITY ──────────────────────────────────
   const handleToggle = async (id) => {
     try {
-      await fetch(`/api/rentals/${id}/toggle`, {
-        method: 'PATCH',
-        headers: getAuthHeaders()
-      });
-      fetchMyFleet();
+      await rentalService.toggleAvailability(currentUser, id);
+      await fetchMyFleet();
       if (onRefreshRentals) onRefreshRentals();
     } catch (err) {
-      console.error(err);
+      console.error('[VendorPortal] toggle error:', err.message);
     }
   };
 
+  // ─── DELETE VEHICLE ───────────────────────────────────────
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to remove this vehicle listing?')) return;
     try {
-      await fetch(`/api/rentals/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      fetchMyFleet();
+      await rentalService.deleteRental(currentUser, id);
+      await fetchMyFleet();
       if (onRefreshRentals) onRefreshRentals();
     } catch (err) {
-      console.error(err);
+      console.error('[VendorPortal] delete error:', err.message);
     }
   };
 
-  const isModalBusy = vehicleSaveStatus === 'saving' || vehicleSaveStatus === 'verifying';
+  const isModalBusy = vehicleSaveStatus === 'saving';
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8 animate-fadeIn">
@@ -284,7 +224,17 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
         {loading ? (
           <div className="py-12 text-center text-slate-400 text-xs font-semibold flex items-center justify-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-            <span>Loading your vehicles from MySQL database...</span>
+            <span>Loading your vehicles from database...</span>
+          </div>
+        ) : fleetError ? (
+          <div className="py-12 text-center space-y-3">
+            <p className="text-xs font-bold text-red-600">Unable to load vehicles. {fleetError}</p>
+            <button
+              onClick={fetchMyFleet}
+              className="py-2.5 px-4 bg-blue-600 text-white font-extrabold rounded-xl hover:bg-blue-500 transition-colors text-xs"
+            >
+              Retry
+            </button>
           </div>
         ) : fleet.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs space-y-3">
@@ -382,7 +332,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
               <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold space-y-1 animate-fadeIn">
                 <div className="flex items-center gap-2 text-red-800">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>Vehicle Verification Failed</span>
+                  <span>Vehicle Save Failed</span>
                 </div>
                 <p className="text-[11px] text-red-600 font-medium">{saveErrorMessage}</p>
               </div>
@@ -394,18 +344,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
                 <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
                 <h4 className="text-base font-extrabold text-slate-900">Saving Vehicle</h4>
                 <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                  Saving your vehicle to the server... Please wait while we securely save your vehicle listing.
-                </p>
-              </div>
-            )}
-
-            {/* VERIFYING STATE UI */}
-            {vehicleSaveStatus === 'verifying' && (
-              <div className="py-12 flex flex-col items-center justify-center space-y-4 text-center animate-fadeIn">
-                <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
-                <h4 className="text-base font-extrabold text-slate-900">Verifying Vehicle</h4>
-                <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                  Vehicle saved successfully. Verifying that it is now available to users across vendor fleet & public catalog...
+                  Saving to database and verifying persistence...
                 </p>
               </div>
             )}
@@ -418,7 +357,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals }) {
                 </div>
                 <h4 className="text-base font-extrabold text-slate-900">Vehicle Verified & Published!</h4>
                 <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                  Vehicle confirmed in MySQL database and is now live for all users.
+                  Vehicle confirmed in database and is now live for all users.
                 </p>
               </div>
             )}

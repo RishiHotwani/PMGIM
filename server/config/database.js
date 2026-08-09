@@ -434,6 +434,21 @@ export async function initDatabase() {
 
 async function seedInitialData() {
   try {
+    const [rentalsRows] = await pool.query('SELECT COUNT(*) as count FROM rentals WHERE status != "DELETED"');
+    if (rentalsRows[0].count === 0) {
+      const defaultRentals = [
+        ['1', 'Honda Activa 6G', 'Campus Scooters Sanquelim', 'Scooter', 350, 4.9, 142, '0.8 km away', 'Petrol', 'Automatic', 'Verified Vendor,Helmets Included', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim. Clean helmets included.', 'GIM Main Gate', true, 'ACTIVE'],
+        ['1', 'Honda City 1.5 i-VTEC', 'Goa Coastal Drive Rentals', 'Car', 2200, 4.8, 98, '1.5 km away', 'Petrol', 'Automatic', 'Sunroof,Sedan,AC', 'https://images.unsplash.com/photo-1590362891991-f776e747a588?auto=format&fit=crop&w=800&q=80', 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips & group airport travel.', 'Sanquelim Circle', true, 'ACTIVE'],
+        ['1', 'Hyundai Verna 1.5 Turbo', 'Bicholim Self-Drive Motors', 'Car', 2400, 4.9, 84, '2.1 km away', 'Petrol', 'Manual', 'Turbo,Bose Audio,Ventilated Seats', 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa coastline exploration.', 'Bicholim / GIM Gate', true, 'ACTIVE']
+      ];
+      for (const r of defaultRentals) {
+        await pool.query(
+          'INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          r
+        );
+      }
+    }
+
     const [exploreRows] = await pool.query('SELECT COUNT(*) as count FROM explore_places');
     if (exploreRows[0].count === 0) {
       const places = [
@@ -468,7 +483,11 @@ async function seedInitialData() {
 }
 
 function seedMemoryData() {
-  memoryStore.rentals = [];
+  memoryStore.rentals = [
+    { id: 1, vendor_user_id: '1', title: 'Honda Activa 6G', vendor: 'Campus Scooters Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.9, total_ratings: 142, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Verified Vendor,Helmets Included', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', description: 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim.', location: 'GIM Main Gate', is_available: true, status: 'ACTIVE' },
+    { id: 2, vendor_user_id: '1', title: 'Honda City 1.5 i-VTEC', vendor: 'Goa Coastal Drive Rentals', category: 'Car', price_per_day: 2200, rating: 4.8, total_ratings: 98, distance: '1.5 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Sunroof,Sedan,AC', image: 'https://images.unsplash.com/photo-1590362891991-f776e747a588?auto=format&fit=crop&w=800&q=80', description: 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips.', location: 'Sanquelim Circle', is_available: true, status: 'ACTIVE' },
+    { id: 3, vendor_user_id: '1', title: 'Hyundai Verna 1.5 Turbo', vendor: 'Bicholim Self-Drive Motors', category: 'Car', price_per_day: 2400, rating: 4.9, total_ratings: 84, distance: '2.1 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Turbo,Bose Audio,Ventilated Seats', image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80', description: 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa driving.', location: 'Bicholim / GIM Gate', is_available: true, status: 'ACTIVE' }
+  ];
 
   memoryStore.explore_places = [
     { id: 1, name: 'Mandrem Beach & Lagoon (Vaayu)', category: 'Beaches', rating: 4.9, distance: '36 km · 55 min scooter', price: '₹450 per person', image: 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=800&q=80', is_bookmarked: false, description: 'Beautiful beach & Mandrem lagoon.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Mandrem+Beach+Vaayu+Goa', best_time: '7:00 AM – 11:00 AM', est_cost: '₹450 / person', pro_tips: 'Smoothie bowls & SUP boards at Vaayu.' },

@@ -120,10 +120,10 @@ export default function AuthGateView({ onAuthSuccess }) {
         {/* Header Logo */}
         <div className="text-center space-y-2">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-500 via-indigo-500 to-sky-400 text-white flex items-center justify-center font-black text-2xl mx-auto shadow-lg shadow-blue-500/30 border border-white/20">
-            BG
+            GM
           </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Beyond<span className="text-blue-600">Goa</span>
+            Go<span className="text-blue-600">Move</span>
           </h1>
           <p className="text-xs text-slate-500 font-medium">
             Campus Mobility & Recommended Experiences

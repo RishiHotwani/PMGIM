@@ -23,7 +23,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
 
   const handleToggleBookmarkClick = (e, spotId) => {
     e.stopPropagation();
-    if (!currentUser?.id) {
+    if (!currentUser?.id && !currentUser?.uuid && !currentUser?.email) {
       alert('Please log in to bookmark places.');
       return;
     }
@@ -83,7 +83,8 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
       {/* Spots Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPlaces.map((item) => {
-          const isBookmarked = currentUser?.id ? Boolean(item.is_bookmarked) : false;
+          const hasUser = Boolean(currentUser?.id || currentUser?.uuid || currentUser?.email);
+          const isBookmarked = hasUser ? (Boolean(item.is_bookmarked) && item.is_bookmarked !== '0' && item.is_bookmarked !== 0) : false;
           return (
             <div
               key={item.id}
