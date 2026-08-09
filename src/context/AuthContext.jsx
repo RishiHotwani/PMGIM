@@ -38,14 +38,27 @@ export function AuthProvider({ children }) {
     restoreSession();
   }, []);
 
+  const safeParseJson = async (res, defaultErrorMsg) => {
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (e) {
+      console.warn('Non-JSON response received:', text);
+    }
+    if (!res.ok) {
+      throw new Error(data.message || (res.status === 401 ? 'Invalid email or password.' : `${defaultErrorMsg} (Server HTTP ${res.status})`));
+    }
+    return data;
+  };
+
   const login = async (email, password) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Login failed');
+    const data = await safeParseJson(res, 'Login failed');
     setCurrentUser(data.user);
     return data;
   };
@@ -56,8 +69,7 @@ export function AuthProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Registration failed');
+    const data = await safeParseJson(res, 'Registration failed');
     setCurrentUser(data.user);
     return data;
   };
@@ -68,8 +80,7 @@ export function AuthProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ credential: credentialToken, role: desiredRole })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Google authentication failed');
+    const data = await safeParseJson(res, 'Google authentication failed');
     setCurrentUser(data.user);
     return data;
   };
@@ -83,8 +94,7 @@ export function AuthProvider({ children }) {
       },
       body: JSON.stringify({ role: newRole })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Failed to update role');
+    const data = await safeParseJson(res, 'Failed to update role');
     setCurrentUser((prev) => (prev ? { ...prev, role: newRole } : null));
     return data;
   };
@@ -105,9 +115,7 @@ export function AuthProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Failed to send reset link');
-    return data;
+    return await safeParseJson(res, 'Failed to send reset link');
   };
 
   const resetPassword = async (token, password) => {
@@ -116,9 +124,7 @@ export function AuthProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, password })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Password reset failed');
-    return data;
+    return await safeParseJson(res, 'Password reset failed');
   };
 
   return (

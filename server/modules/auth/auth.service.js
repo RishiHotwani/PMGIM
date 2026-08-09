@@ -39,12 +39,16 @@ export function sanitizeUserDTO(user) {
 export async function registerEmailUser({ name, email, password, batch, section, phone, role }, clientInfo) {
   const existingUser = await findUserByEmail(email);
   if (existingUser) {
-    throw new Error('An account with this email address already exists. Please log in.');
+    const err = new Error('An account with this email address already exists. Please log in.');
+    err.statusCode = 409;
+    throw err;
   }
 
   const passCheck = validatePasswordStrength(password);
   if (!passCheck.valid) {
-    throw new Error(passCheck.message);
+    const err = new Error(passCheck.message);
+    err.statusCode = 400;
+    throw err;
   }
 
   const passwordHash = await hashPassword(password);
@@ -85,13 +89,17 @@ export async function registerEmailUser({ name, email, password, batch, section,
 export async function loginEmailUser({ email, password }, clientInfo) {
   const user = await findUserByEmail(email);
   if (!user) {
-    throw new Error('Invalid email or password.');
+    const err = new Error('Invalid email or password.');
+    err.statusCode = 401;
+    throw err;
   }
 
   // OWASP ASVS: Check Account Lockout
   if (user.lock_until && new Date(user.lock_until) > new Date()) {
     const minutesLeft = Math.ceil((new Date(user.lock_until) - new Date()) / (60 * 1000));
-    throw new Error(`Account is temporarily locked due to failed attempts. Try again in ${minutesLeft} minute(s).`);
+    const err = new Error(`Account is temporarily locked due to failed attempts. Try again in ${minutesLeft} minute(s).`);
+    err.statusCode = 423;
+    throw err;
   }
 
   const isMatch = await comparePassword(password, user.password_hash);
@@ -100,9 +108,13 @@ export async function loginEmailUser({ email, password }, clientInfo) {
     await logAuditActivity(user.id, user.name, 'FAILED_LOGIN', `Failed login attempt ${newAttempts}/5`, { ip: clientInfo.ip });
     
     if (lockTime) {
-      throw new Error('Account has been locked for 15 minutes due to multiple failed login attempts.');
+      const err = new Error('Account has been locked for 15 minutes due to multiple failed login attempts.');
+      err.statusCode = 423;
+      throw err;
     }
-    throw new Error('Invalid email or password.');
+    const err = new Error('Invalid email or password.');
+    err.statusCode = 401;
+    throw err;
   }
 
   await updateUserLastLogin(user.id);
