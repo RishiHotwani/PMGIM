@@ -388,5 +388,35 @@ export const DEFAULT_EXPLORE_PLACES = [
     best_time: '6:00 AM – 1:00 PM, 4:00 PM – 9:00 PM',
     est_cost: 'Free Entry',
     pro_tips: 'Illuminated beautifully with hundreds of oil lamps during evening aarti.'
+  },
+  {
+    id: 27,
+    name: 'Cavelossim Beach (South Goa)',
+    category: 'Beaches',
+    rating: 4.8,
+    distance: '70 km · 1 hr 40 min drive',
+    price: 'Free Entry',
+    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
+    is_bookmarked: false,
+    description: 'Stunning beach in South Goa known for its unique contrast of black volcanic lava rocks against powdery white sand and River Sal estuary views.',
+    maps_url: 'https://www.google.com/maps/search/?api=1&query=Cavelossim+Beach+South+Goa',
+    best_time: '3:30 PM – 7:00 PM (Sunset)',
+    est_cost: 'Free Entry',
+    pro_tips: 'Great spot for dolphin-spotting boat trips and peaceful evening beach walks.'
+  },
+  {
+    id: 28,
+    name: 'Dolphin Watching Boat Safari',
+    category: 'Beaches',
+    rating: 4.7,
+    distance: '32 km · 50 min scooter',
+    price: '₹400 per person',
+    image: 'https://images.unsplash.com/photo-1544551763-77ef2d0cfc6c?auto=format&fit=crop&w=800&q=80',
+    is_bookmarked: false,
+    description: 'Thrilling 1.5-hour ocean boat trip into the Arabian Sea to watch wild Indo-Pacific humpback dolphins frolicking near Coco Beach & Palolem.',
+    maps_url: 'https://www.google.com/maps/search/?api=1&query=Dolphin+Watching+Boat+Trip+Goa',
+    best_time: '7:00 AM – 10:00 AM (Early Morning)',
+    est_cost: '₹400 / person',
+    pro_tips: 'Early morning boat trips offer the highest chance of spotting active dolphin pods.'
   }
 ];
