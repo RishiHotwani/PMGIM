@@ -122,11 +122,11 @@ export const DEFAULT_EXPLORE_PLACES = [
   {
     id: 9,
     name: 'Fontainhas Latin Quarter',
-    category: 'Cafes',
+    category: 'Nightlife',
     rating: 4.8,
     distance: '28 km · 45 min scooter',
     price: '₹400 per person',
-    image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80',
+    image: 'https://www.tourmyindia.com/states/goa/image/fontainhas-latin-quarter-goa.webp',
     is_bookmarked: false,
     description: 'UNESCO heritage Portuguese quarter in Panjim with pastel yellow/blue villas, art galleries, and historic bakeries.',
     maps_url: 'https://www.google.com/maps/search/?api=1&query=Fontainhas+Panjim+Goa',
