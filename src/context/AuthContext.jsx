@@ -63,6 +63,17 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const loginPhone = async (phone, password) => {
+    const res = await fetch('/api/auth/login-phone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, password })
+    });
+    const data = await safeParseJson(res, 'Phone login failed');
+    setCurrentUser(data.user);
+    return data;
+  };
+
   const signup = async (userData) => {
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
@@ -133,6 +144,7 @@ export function AuthProvider({ children }) {
         currentUser,
         loading,
         login,
+        loginPhone,
         signup,
         loginWithGoogleToken,
         updateUserRole,

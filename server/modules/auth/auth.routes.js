@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import {
   handleSignup,
   handleLogin,
+  handlePhoneLogin,
   handleGoogleAuth,
   handleRefreshToken,
   handleForgotPassword,
@@ -28,7 +29,12 @@ const signupValidation = [
 ];
 
 const loginValidation = [
-  body('email').trim().isEmail().withMessage('Valid email address is required').normalizeEmail(),
+  body('password').notEmpty().withMessage('Password is required'),
+  handleValidationErrors
+];
+
+const phoneLoginValidation = [
+  body('phone').trim().notEmpty().withMessage('Mobile phone number is required'),
   body('password').notEmpty().withMessage('Password is required'),
   handleValidationErrors
 ];
@@ -47,6 +53,7 @@ const resetPasswordValidation = [
 // Public Authentication Endpoints
 router.post('/signup', authRateLimiter, signupValidation, handleSignup);
 router.post('/login', authRateLimiter, loginValidation, handleLogin);
+router.post('/login-phone', authRateLimiter, phoneLoginValidation, handlePhoneLogin);
 router.post('/google', authRateLimiter, handleGoogleAuth);
 router.post('/google/callback', authRateLimiter, handleGoogleAuth);
 router.post('/refresh', handleRefreshToken);

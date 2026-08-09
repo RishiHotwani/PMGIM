@@ -13,6 +13,20 @@ export async function findUserByEmail(email) {
   return memoryStore.users.find(u => u.email === email && !u.deleted_at) || null;
 }
 
+export async function findUserByPhone(phone) {
+  if (!phone) return null;
+  if (!isInMemoryFallback) {
+    try {
+      const rows = await query('SELECT * FROM users WHERE phone_number = ? AND deleted_at IS NULL', [phone]);
+      return rows[0] || null;
+    } catch (e) {
+      const rows = await query('SELECT * FROM users WHERE phone_number = ?', [phone]);
+      return rows[0] || null;
+    }
+  }
+  return memoryStore.users.find(u => u.phone_number === phone && !u.deleted_at) || null;
+}
+
 export async function findUserByUuid(uuid) {
   if (!isInMemoryFallback) {
     try {
@@ -53,17 +67,19 @@ export async function findUserByGoogleId(googleId) {
 }
 
 export async function createUser(userData) {
-  const { uuid, name, email, passwordHash, googleId, provider, avatar, emailVerified, role } = userData;
+  const { uuid, name, email, phone, passwordHash, googleId, provider, avatar, emailVerified, role } = userData;
+  const phoneNumber = phone || userData.phone_number || null;
 
   if (!isInMemoryFallback) {
     try {
       await query(
-        `INSERT INTO users (uuid, name, email, password_hash, google_id, provider, avatar, email_verified, role) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO users (uuid, name, email, phone_number, password_hash, google_id, provider, avatar, email_verified, role) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           uuid,
           name,
           email,
+          phoneNumber,
           passwordHash || null,
           googleId || null,
           provider || 'EMAIL',
@@ -87,6 +103,7 @@ export async function createUser(userData) {
     uuid,
     name,
     email,
+    phone_number: phoneNumber,
     password_hash: passwordHash || null,
     google_id: googleId || null,
     provider: provider || 'EMAIL',
@@ -103,6 +120,26 @@ export async function createUser(userData) {
   };
   memoryStore.users.push(newUser);
   return newUser;
+}
+
+export async function updateUserProfile(uuid, { name, phone }) {
+  if (!isInMemoryFallback) {
+    await query(
+      `UPDATE users SET 
+       name = COALESCE(?, name), 
+       phone_number = COALESCE(?, phone_number) 
+       WHERE uuid = ?`,
+      [name || null, phone || null, uuid]
+    );
+    return await findUserByUuid(uuid);
+  }
+
+  const u = memoryStore.users.find(x => x.uuid === uuid);
+  if (u) {
+    if (name) u.name = name;
+    if (phone) u.phone_number = phone;
+  }
+  return u || null;
 }
 
 export async function updateUserLastLogin(userId) {

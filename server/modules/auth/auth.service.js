@@ -2,10 +2,12 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import {
   findUserByEmail,
+  findUserByPhone,
   findUserByUuid,
   findUserById,
   findUserByGoogleId,
   createUser,
+  updateUserProfile,
   updateUserLastLogin,
   incrementFailedLogin,
   updateUserPassword,
@@ -24,6 +26,7 @@ import { hashPassword, comparePassword, validatePasswordStrength } from '../../u
 import { generateAccessToken, generateRefreshTokenPayload, hashRefreshToken } from '../../utils/jwt.js';
 import { verifyGoogleToken } from '../../utils/googleAuth.js';
 import { logAuditActivity } from '../../utils/logger.js';
+import { normalizePhoneNumber } from '../../utils/phone.js';
 
 export function sanitizeUserDTO(user) {
   if (!user) return null;
@@ -44,6 +47,22 @@ export async function registerEmailUser({ name, email, password, batch, section,
     throw err;
   }
 
+  let normalizedPhone = null;
+  if (phone) {
+    normalizedPhone = normalizePhoneNumber(phone);
+    if (!normalizedPhone) {
+      const err = new Error('Invalid 10-digit phone number format.');
+      err.statusCode = 400;
+      throw err;
+    }
+    const phoneUser = await findUserByPhone(normalizedPhone);
+    if (phoneUser) {
+      const err = new Error('An account with this phone number already exists. Please log in.');
+      err.statusCode = 409;
+      throw err;
+    }
+  }
+
   const passCheck = validatePasswordStrength(password);
   if (!passCheck.valid) {
     const err = new Error(passCheck.message);
@@ -60,6 +79,7 @@ export async function registerEmailUser({ name, email, password, batch, section,
     uuid: userUuid,
     name,
     email,
+    phone: normalizedPhone,
     passwordHash,
     provider: 'EMAIL',
     avatar: initials,
@@ -134,6 +154,65 @@ export async function loginEmailUser({ email, password }, clientInfo) {
   });
 
   await logAuditActivity(user.id, user.name, 'USER_LOGIN', `Email login successful for ${user.email}`, { ip: clientInfo.ip });
+
+  return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
+}
+
+export async function loginPhoneUser({ phone, password }, clientInfo) {
+  const normPhone = normalizePhoneNumber(phone);
+  if (!normPhone) {
+    const err = new Error('Valid 10-digit mobile number is required.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const user = await findUserByPhone(normPhone);
+  if (!user) {
+    const err = new Error('No account found with this phone number.');
+    err.statusCode = 401;
+    throw err;
+  }
+
+  // OWASP ASVS: Check Account Lockout
+  if (user.lock_until && new Date(user.lock_until) > new Date()) {
+    const minutesLeft = Math.ceil((new Date(user.lock_until) - new Date()) / (60 * 1000));
+    const err = new Error(`Account is temporarily locked due to failed attempts. Try again in ${minutesLeft} minute(s).`);
+    err.statusCode = 423;
+    throw err;
+  }
+
+  const isMatch = await comparePassword(password, user.password_hash);
+  if (!isMatch) {
+    const { newAttempts, lockTime } = await incrementFailedLogin(user.id, user.failed_login_attempts || 0);
+    await logAuditActivity(user.id, user.name, 'FAILED_LOGIN', `Failed phone login attempt ${newAttempts}/5`, { ip: clientInfo.ip });
+    
+    if (lockTime) {
+      const err = new Error('Account has been locked for 15 minutes due to multiple failed login attempts.');
+      err.statusCode = 423;
+      throw err;
+    }
+    const err = new Error('Invalid phone number or password.');
+    err.statusCode = 401;
+    throw err;
+  }
+
+  await updateUserLastLogin(user.id);
+
+  const accessToken = generateAccessToken(user);
+  const { rawToken, tokenHash } = generateRefreshTokenPayload();
+  const familyId = uuidv4();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  await storeRefreshToken({
+    userId: user.id,
+    tokenHash,
+    familyId,
+    expiresAt,
+    userAgent: clientInfo.userAgent,
+    ipAddress: clientInfo.ip
+  });
+
+  await logAuditActivity(user.id, user.name, 'USER_LOGIN', `Phone login successful for ${user.phone_number}`, { ip: clientInfo.ip });
 
   return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
 }

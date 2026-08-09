@@ -89,6 +89,7 @@ export async function initDatabase() {
         uuid VARCHAR(36) NOT NULL UNIQUE,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) NOT NULL UNIQUE,
+        phone_number VARCHAR(20) NULL UNIQUE,
         password_hash VARCHAR(255) NULL,
         google_id VARCHAR(255) NULL UNIQUE,
         provider ENUM('EMAIL', 'GOOGLE') NOT NULL DEFAULT 'EMAIL',
@@ -108,6 +109,8 @@ export async function initDatabase() {
     // Column updates for Users
     const userAlterations = [
       "ADD COLUMN uuid VARCHAR(36) NULL",
+      "ADD COLUMN phone_number VARCHAR(20) NULL",
+      "ADD UNIQUE INDEX idx_users_phone (phone_number)",
       "ADD COLUMN google_id VARCHAR(255) NULL",
       "ADD COLUMN provider ENUM('EMAIL', 'GOOGLE') NOT NULL DEFAULT 'EMAIL'",
       "ADD COLUMN email_verified BOOLEAN DEFAULT FALSE",

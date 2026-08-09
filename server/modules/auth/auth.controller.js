@@ -1,6 +1,7 @@
 import {
   registerEmailUser,
   loginEmailUser,
+  loginPhoneUser,
   authenticateGoogleUser,
   rotateRefreshToken,
   forgotPassword,
@@ -11,7 +12,8 @@ import {
   sanitizeUserDTO
 } from './auth.service.js';
 import { setAuthCookies, clearAuthCookies } from '../../utils/jwt.js';
-import { findUserByUuid } from './auth.repository.js';
+import { findUserByUuid, updateUserProfile } from './auth.repository.js';
+import { normalizePhoneNumber } from '../../utils/phone.js';
 
 export async function handleSignup(req, res, next) {
   try {
@@ -34,13 +36,39 @@ export async function handleSignup(req, res, next) {
 export async function handleLogin(req, res, next) {
   try {
     const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
-    const { user, accessToken, refreshToken } = await loginEmailUser(req.body, clientInfo);
+    const identifier = req.body.identifier || req.body.email || req.body.phone;
 
+    let result;
+    if (req.body.phone || (identifier && /^[+\d\s\-\(\)]+$/.test(String(identifier).trim()) && !identifier.includes('@'))) {
+      result = await loginPhoneUser({ phone: identifier || req.body.phone, password: req.body.password }, clientInfo);
+    } else {
+      result = await loginEmailUser({ email: identifier || req.body.email, password: req.body.password }, clientInfo);
+    }
+
+    const { user, accessToken, refreshToken } = result;
     setAuthCookies(res, accessToken, refreshToken);
 
     res.json({
       success: true,
       message: 'Login successful',
+      user,
+      accessToken
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handlePhoneLogin(req, res, next) {
+  try {
+    const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
+    const { user, accessToken, refreshToken } = await loginPhoneUser(req.body, clientInfo);
+
+    setAuthCookies(res, accessToken, refreshToken);
+
+    res.json({
+      success: true,
+      message: 'Phone login successful',
       user,
       accessToken
     });
@@ -164,21 +192,24 @@ export async function handleGetMe(req, res, next) {
 
 export async function handleUpdateProfile(req, res, next) {
   try {
-    const user = await findUserByUuid(req.user.uuid);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    const { name, phone } = req.body;
+    let normPhone = null;
+    if (phone) {
+      normPhone = normalizePhoneNumber(phone);
+      if (!normPhone) {
+        return res.status(400).json({ success: false, message: 'Invalid phone number format.' });
+      }
     }
 
-    const { name, phone, batch, section } = req.body;
-    if (name) user.name = name;
-    if (phone) user.phone = phone;
-    if (batch) user.batch = batch;
-    if (section) user.section = section;
+    const updatedUser = await updateUserProfile(req.user.uuid, { name, phone: normPhone });
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
 
     res.json({
       success: true,
       message: 'Profile updated successfully',
-      user: sanitizeUserDTO(user)
+      user: sanitizeUserDTO(updatedUser)
     });
   } catch (err) {
     next(err);
