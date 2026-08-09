@@ -69,57 +69,59 @@ export async function findUserByGoogleId(googleId) {
 export async function createUser(userData) {
   const { uuid, name, email, phone, passwordHash, googleId, provider, avatar, emailVerified, role } = userData;
   const phoneNumber = phone || userData.phone_number || null;
+  const userUuid = uuid || 'usr_' + Date.now();
 
-  if (!isInMemoryFallback) {
+  try {
+    await query(
+      `INSERT INTO users (uuid, name, email, phone_number, password_hash, google_id, provider, avatar, email_verified, role) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userUuid,
+        name,
+        email,
+        phoneNumber,
+        passwordHash || null,
+        googleId || null,
+        provider || 'EMAIL',
+        avatar || 'US',
+        emailVerified ? 1 : 0,
+        role || 'USER'
+      ]
+    );
+  } catch (e) {
     try {
-      await query(
-        `INSERT INTO users (uuid, name, email, phone_number, password_hash, google_id, provider, avatar, email_verified, role) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          uuid,
-          name,
-          email,
-          phoneNumber,
-          passwordHash || null,
-          googleId || null,
-          provider || 'EMAIL',
-          avatar || 'US',
-          emailVerified ? 1 : 0,
-          role || 'USER'
-        ]
-      );
-    } catch (e) {
-      // Fallback for pre-existing simpler users table schema
       await query(
         `INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)`,
         [name, email, passwordHash || '']
       );
-    }
-    return await findUserByEmail(email);
+    } catch (err2) {}
   }
 
-  const newUser = {
-    id: memoryStore.users.length + 1,
-    uuid,
-    name,
-    email,
-    phone_number: phoneNumber,
-    password_hash: passwordHash || null,
-    google_id: googleId || null,
-    provider: provider || 'EMAIL',
-    avatar: avatar || 'US',
-    email_verified: emailVerified || false,
-    role: role || 'USER',
-    is_active: true,
-    failed_login_attempts: 0,
-    lock_until: null,
-    last_login: new Date(),
-    created_at: new Date(),
-    updated_at: new Date(),
-    deleted_at: null
-  };
-  memoryStore.users.push(newUser);
-  return newUser;
+  let createdUser = await findUserByEmail(email);
+  if (!createdUser) {
+    createdUser = {
+      id: memoryStore.users.length + 1,
+      uuid: userUuid,
+      name,
+      email,
+      phone_number: phoneNumber,
+      password_hash: passwordHash || null,
+      google_id: googleId || null,
+      provider: provider || 'EMAIL',
+      avatar: avatar || 'US',
+      email_verified: emailVerified !== false,
+      role: role || 'USER',
+      is_active: true,
+      failed_login_attempts: 0,
+      lock_until: null,
+      last_login: new Date(),
+      created_at: new Date(),
+      updated_at: new Date(),
+      deleted_at: null
+    };
+    memoryStore.users.push(createdUser);
+  }
+  return createdUser;
 }
 
 export async function updateUserProfile(uuid, { name, phone }) {

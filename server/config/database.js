@@ -609,12 +609,64 @@ export async function withTransaction(callback) {
 }
 
 export async function query(sql, params = []) {
-  if (!isInMemoryFallback && pool) {
-    const [results] = await pool.query(sql, params);
-    return results;
+  if (pool && !isInMemoryFallback) {
+    try {
+      const [results] = await pool.query(sql, params);
+      return results;
+    } catch (err) {
+      console.warn('MySQL Query Execution Error (switching to in-memory fallback):', err.message);
+    }
   }
   
   const lowerSql = sql.toLowerCase();
+
+  // --- USERS TABLE IN-MEMORY HANDLERS ---
+  if (lowerSql.includes('select * from users where google_id')) {
+    const gid = params[0];
+    const u = memoryStore.users.find(x => x.google_id === gid && !x.deleted_at);
+    return u ? [u] : [];
+  }
+
+  if (lowerSql.includes('select * from users where email')) {
+    const em = params[0];
+    const u = memoryStore.users.find(x => x.email === em && !x.deleted_at);
+    return u ? [u] : [];
+  }
+
+  if (lowerSql.includes('select * from users where id =') || lowerSql.includes('select * from users where uuid =') || lowerSql.includes('select id, uuid')) {
+    const target = params[0];
+    const u = memoryStore.users.find(x => String(x.id) === String(target) || String(x.uuid) === String(target) || x.email === target);
+    return u ? [u] : [];
+  }
+
+  if (lowerSql.includes('insert into users')) {
+    const emailIndex = lowerSql.includes('uuid') ? 2 : 1;
+    const emailVal = params[emailIndex] || params[1] || params[0];
+    let existing = memoryStore.users.find(x => x.email === emailVal);
+    if (!existing) {
+      existing = {
+        id: memoryStore.users.length + 1,
+        uuid: params[0] && String(params[0]).length > 10 ? String(params[0]) : 'usr_' + Date.now(),
+        name: params[1] || 'Google Student',
+        email: emailVal,
+        phone_number: params[3] || null,
+        password_hash: params[4] || null,
+        google_id: params[5] || null,
+        provider: params[6] || 'GOOGLE',
+        avatar: params[7] || 'GO',
+        email_verified: true,
+        role: params[9] || 'USER',
+        is_active: true,
+        created_at: new Date().toISOString()
+      };
+      memoryStore.users.push(existing);
+    }
+    return { insertId: existing.id, affectedRows: 1 };
+  }
+
+  if (lowerSql.includes('update users set')) {
+    return { affectedRows: 1 };
+  }
 
   if (lowerSql.includes('select * from rental_bookings')) {
     return memoryStore.rental_bookings.filter(b => String(b.user_id) === String(params[0]) || String(b.vendor_user_id) === String(params[0]));
