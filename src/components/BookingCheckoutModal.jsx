@@ -31,7 +31,7 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
     setIsProcessing(true);
 
     try {
-      // 1. Create order on server
+      // 1. Create order on server (Server is authoritative source of truth for pricing)
       const orderRes = await fetch('/api/payments/create-order', {
         method: 'POST',
         headers: {
@@ -45,11 +45,6 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
           vendor_user_id: vehicle.vendor_user_id || null,
           days,
           start_date: startDate,
-          daily_rate: dailyRate,
-          deposit,
-          service_fee: serviceFee,
-          gst_amount: gstAmount,
-          total_amount: finalPayableTotal,
           user_name: userName,
           user_email: userEmail,
           user_phone: phone
@@ -59,7 +54,9 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.message || 'Order creation failed');
 
-      // 2. Trigger Razorpay Checkout Modal
+      const serverTotalAmount = orderData.pricing?.total_amount || finalPayableTotal;
+
+      // 2. Trigger Razorpay Checkout Modal with exact server amount_in_paise
       const options = {
         key: orderData.razorpay_key || razorpayKey,
         amount: orderData.amount_in_paise,
@@ -90,7 +87,7 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
             if (verifyRes.ok && verifyData.success) {
               setBookingSuccess(true);
               if (onLogAction) {
-                onLogAction('PAYMENT_SUCCESS', `Paid ₹${finalPayableTotal} for ${vehicle.title} via Razorpay`);
+                onLogAction('PAYMENT_SUCCESS', `Paid ₹${serverTotalAmount} for ${vehicle.title} via Razorpay`);
               }
             } else {
               alert('Payment verification failed. Please contact support.');

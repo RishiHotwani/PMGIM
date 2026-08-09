@@ -356,14 +356,13 @@ app.post('/api/payments/create-order', async (req, res, next) => {
       });
     }
 
-    // SERVER-SIDE PRICING CALCULATION
-    const dailyRate = parseFloat(rental.price_per_day);
-    const rentalAmount = dailyRate * daysNum;
-    const securityDeposit = 1000.00;
-    const serviceFee = 99.00;
-    const subtotal = rentalAmount + serviceFee;
-    const gstAmount = Math.round(subtotal * 0.18 * 100) / 100;
-    const totalAmount = subtotal + gstAmount + securityDeposit;
+    // SERVER-SIDE PRICING CALCULATION (SINGLE SOURCE OF TRUTH)
+    const dailyRate = parseFloat(rental.price_per_day || rental.price || 350);
+    const baseTotal = dailyRate * daysNum;
+    const deposit = rental.category === 'Car' ? 2000.00 : 500.00;
+    const serviceFee = 50.00;
+    const gstAmount = Math.round((baseTotal + serviceFee) * 0.18);
+    const totalAmount = baseTotal + deposit + serviceFee + gstAmount;
     const amountInPaise = Math.round(totalAmount * 100);
 
     const orderOptions = {
@@ -381,7 +380,13 @@ app.post('/api/payments/create-order', async (req, res, next) => {
     try {
       razorpayOrder = await razorpayInstance.orders.create(orderOptions);
     } catch (rzpErr) {
-      console.warn('Razorpay order creation fallback mode:', rzpErr.message);
+      console.error('[RAZORPAY_ORDER_CREATE_ERROR]', rzpErr);
+      if (ENV.RAZORPAY.KEY_ID && !ENV.RAZORPAY.KEY_ID.includes('dummy') && process.env.NODE_ENV === 'production') {
+        return res.status(400).json({
+          success: false,
+          message: `Razorpay Gateway Error: ${rzpErr.message || 'Order creation rejected by payment gateway'}`
+        });
+      }
       razorpayOrder = {
         id: `order_mock_${Date.now()}`,
         amount: amountInPaise,
@@ -405,8 +410,8 @@ app.post('/api/payments/create-order', async (req, res, next) => {
         startStr,
         endStr,
         dailyRate,
-        rentalAmount,
-        securityDeposit,
+        baseTotal,
+        deposit,
         serviceFee,
         gstAmount,
         totalAmount,
@@ -420,11 +425,20 @@ app.post('/api/payments/create-order', async (req, res, next) => {
       amount_in_paise: amountInPaise,
       razorpay_key: ENV.RAZORPAY.KEY_ID,
       booking_id: bookingResult.insertId,
+      pricing: {
+        daily_rate: dailyRate,
+        days: daysNum,
+        base_total: baseTotal,
+        deposit,
+        service_fee: serviceFee,
+        gst_amount: gstAmount,
+        total_amount: totalAmount
+      },
       breakdown: {
         dailyRate,
         daysNum,
-        rentalAmount,
-        securityDeposit,
+        rentalAmount: baseTotal,
+        securityDeposit: deposit,
         serviceFee,
         gstAmount,
         totalAmount
