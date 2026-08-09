@@ -470,14 +470,16 @@ export async function initDatabase() {
 
 async function seedInitialData() {
   try {
-    const [rentalsRows] = await pool.query('SELECT COUNT(*) as count FROM rentals WHERE status != "DELETED"');
-    if (rentalsRows[0].count === 0) {
-      const defaultRentals = [
-        ['1', 'Honda Activa 6G', 'Campus Scooters Sanquelim', 'Scooter', 350, 4.9, 142, '0.8 km away', 'Petrol', 'Automatic', 'Verified Vendor,Helmets Included', 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim. Clean helmets included.', 'GIM Main Gate', true, 'ACTIVE'],
-        ['1', 'Honda City 1.5 i-VTEC', 'Goa Coastal Drive Rentals', 'Car', 2200, 4.8, 98, '1.5 km away', 'Petrol', 'Automatic', 'Sunroof,Sedan,AC', 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips & group airport travel.', 'Sanquelim Circle', true, 'ACTIVE'],
-        ['1', 'Hyundai Verna 1.5 Turbo', 'Bicholim Self-Drive Motors', 'Car', 2400, 4.9, 84, '2.1 km away', 'Petrol', 'Manual', 'Turbo,Bose Audio,Ventilated Seats', 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa coastline exploration.', 'Bicholim / GIM Gate', true, 'ACTIVE']
-      ];
-      for (const r of defaultRentals) {
+    const defaultRentals = [
+      ['1', 'Honda Activa 6G', 'Campus Scooters Sanquelim', 'Scooter', 350, 4.9, 142, '0.8 km away', 'Petrol', 'Automatic', 'Verified Vendor,Helmets Included', 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim. Clean helmets included.', 'GIM Main Gate', true, 'ACTIVE'],
+      ['1', 'Honda City 1.5 i-VTEC', 'Goa Coastal Drive Rentals', 'Car', 2200, 4.8, 98, '1.5 km away', 'Petrol', 'Automatic', 'Sunroof,Sedan,AC', 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips & group airport travel.', 'Sanquelim Circle', true, 'ACTIVE'],
+      ['1', 'Hyundai Verna 1.5 Turbo', 'Bicholim Self-Drive Motors', 'Car', 2400, 4.9, 84, '2.1 km away', 'Petrol', 'Manual', 'Turbo,Bose Audio,Ventilated Seats', 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa coastline exploration.', 'Bicholim / GIM Gate', true, 'ACTIVE'],
+      ['1', 'Royal Enfield Hunter 350', 'North Goa Bike Rentals', 'Bike', 750, 4.8, 65, '1.0 km away', 'Petrol', 'Manual', 'Cruiser,Helmets Included', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Comfortable 350cc cruiser bike perfect for scenic coastal highway rides.', 'GIM Main Gate', true, 'ACTIVE']
+    ];
+
+    for (const r of defaultRentals) {
+      const [existing] = await pool.query('SELECT id FROM rentals WHERE title = ? AND vendor = ? AND status != "DELETED"', [r[1], r[2]]);
+      if (!existing || existing.length === 0) {
         await pool.query(
           'INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           r
