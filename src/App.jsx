@@ -4,6 +4,7 @@ import BottomNav from './components/BottomNav';
 import HomeView from './views/HomeView';
 import RentalsView from './views/RentalsView';
 import ExploreView from './views/ExploreView';
+import TripPlannerView from './views/TripPlannerView';
 import TravelView from './views/TravelView';
 import ProfileView from './views/ProfileView';
 import AuthGateView from './views/AuthGateView';
@@ -288,6 +289,15 @@ function MainAppContent() {
               currentUser={currentUser}
               onToggleBookmark={handleToggleBookmark}
               initialSearchQuery={exploreSearchQuery}
+            />
+          )}
+
+          {activeTab === 'planner' && (
+            <TripPlannerView
+              places={explorePlaces}
+              onLogAction={handleLogAction}
+              currentUser={currentUser}
+              onToggleBookmark={handleToggleBookmark}
             />
           )}
 

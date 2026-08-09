@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, LogOut, Compass, Bike, Users, Home, User, Store, Check, Sparkles, Inbox, BarChart3 } from 'lucide-react';
+import { Bell, LogOut, Compass, Bike, Users, Home, User, Store, Check, Sparkles, Inbox, BarChart3, Map } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
 export default function Header({ currentUser, onLogout, activeTab, setActiveTab }) {
@@ -14,6 +14,7 @@ export default function Header({ currentUser, onLogout, activeTab, setActiveTab 
     ...(isVendor ? [{ id: 'vendor_portal', label: 'Vendor Portal', icon: Store }] : []),
     ...(isVendor ? [{ id: 'analytics', label: 'Analytics', icon: BarChart3 }] : []),
     { id: 'explore', label: 'Explore Goa', icon: Compass },
+    { id: 'planner', label: 'Trip Planner', icon: Map },
     { id: 'travel', label: 'Travel Board', icon: Users },
     { id: 'profile', label: 'Profile', icon: User },
   ];

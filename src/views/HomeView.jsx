@@ -40,12 +40,12 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
     {
       id: 'planner',
       title: 'Trip Planner',
-      subtitle: 'Plan your weekend getaway with friends',
+      subtitle: 'Generate custom itineraries & PDF travel guide',
       bgGradient: 'bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800',
       iconBg: 'bg-purple-400/30 text-white',
       icon: Luggage,
-      tab: 'explore',
-      badge: 'Weekend Special'
+      tab: 'planner',
+      badge: 'Smart PDF Guide'
     }
   ];
 
@@ -154,78 +154,7 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
         </div>
       </div>
 
-      {/* Recommended Places Section */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-extrabold text-slate-900">Recommended Places</h2>
-            <p className="text-xs text-slate-500">Student-voted beaches, cafes & natural spots</p>
-          </div>
-          <button
-            onClick={() => {
-              onLogAction('SEE_ALL_CLICK', 'Clicked See All recommended places');
-              setActiveTab('explore');
-            }}
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 px-3.5 py-2 rounded-xl hover:bg-blue-50 transition-colors"
-          >
-            <span>See all places</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* Responsive Full-Width Grid of Recommended Places */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {places && places.length > 0 ? (
-            places.map((place) => (
-              <div
-                key={place.id}
-                onClick={() => {
-                  onLogAction('VIEW_PLACE', `Viewed place details: ${place.name}`);
-                  setActiveTab('explore');
-                }}
-                className="bg-white rounded-3xl overflow-hidden card-shadow border border-slate-200/70 hover:border-blue-200 transition-all hover:shadow-xl cursor-pointer flex flex-col justify-between"
-              >
-                <div className="relative h-48 w-full bg-slate-100">
-                  <img
-                    src={place.image}
-                    alt={place.name}
-                    className="w-full h-full object-cover"
-                  />
-                  <span className="absolute top-3 left-3 px-3 py-1 bg-white/90 backdrop-blur-md rounded-full text-xs font-bold text-slate-800 shadow-sm">
-                    {place.category}
-                  </span>
-                  <div className="absolute bottom-3 right-3 px-2.5 py-1 bg-slate-900/80 backdrop-blur-md rounded-full text-xs font-bold text-white flex items-center gap-1 shadow-sm">
-                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span>{place.rating}</span>
-                  </div>
-                </div>
-
-                <div className="p-5 space-y-2">
-                  <h4 className="font-extrabold text-slate-900 text-base leading-snug">{place.name}</h4>
-                  <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                    <Navigation className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>{place.distance}</span>
-                  </p>
-                  {place.price && (
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-emerald-600">
-                      <span>Budget:</span>
-                      <span>{place.price}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))
-          ) : (
-            [1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-white rounded-3xl overflow-hidden border border-slate-100 p-4 space-y-3 animate-pulse">
-                <div className="h-44 bg-slate-200 rounded-2xl w-full" />
-                <div className="h-4 bg-slate-200 rounded w-3/4" />
-                <div className="h-3 bg-slate-100 rounded w-1/2" />
-              </div>
-            ))
-          )}
-        </div>
-      </div>
 
       {/* Frequently Asked Questions (FAQs) Section */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-6 md:p-10 shadow-lg space-y-6">

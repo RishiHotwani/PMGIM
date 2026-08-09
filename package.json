@@ -27,6 +27,7 @@
     "google-auth-library": "^9.10.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.378.0",
     "mysql2": "^3.9.7",
     "postcss": "^8.4.38",

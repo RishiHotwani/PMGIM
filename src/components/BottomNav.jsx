@@ -1,10 +1,11 @@
 import React from 'react';
-import { Home, Bike, Compass, Users, User } from 'lucide-react';
+import { Home, Bike, Compass, Users, User, Map } from 'lucide-react';
 
 export default function BottomNav({ activeTab, setActiveTab }) {
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'rentals', label: 'Rentals', icon: Bike },
+    { id: 'planner', label: 'Planner', icon: Map },
     { id: 'explore', label: 'Explore', icon: Compass },
     { id: 'travel', label: 'Travel', icon: Users },
     { id: 'profile', label: 'Profile', icon: User },
