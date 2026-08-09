@@ -654,26 +654,69 @@ app.post('/api/explore/:id/reviews', async (req, res, next) => {
       id: result.insertId
     });
   } catch (err) {
-    next(err);
-  }
-});
-
-// ----------------- TRAVEL TRIPS & CONCURRENCY JOIN/LEAVE -----------------
+    next(er// ----------------- TRAVEL TRIPS & CONCURRENCY JOIN/LEAVE -----------------
 app.get('/api/trips', async (req, res, next) => {
   try {
     const { destination, search } = req.query;
-    let sql = "SELECT * FROM travel_trips WHERE status != 'CANCELLED'";
+    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
+    const userUuid = req.headers['x-user-uuid'] ? String(req.headers['x-user-uuid']).trim() : '';
+    const userEmail = req.headers['x-user-email'] ? String(req.headers['x-user-email']).trim() : '';
+    const targetId = userId || userUuid || userEmail;
+
+    if (isInMemoryFallback) {
+      let filtered = memoryStore.travel_trips.filter(t => t.status !== 'CANCELLED');
+      if (destination && destination.trim()) {
+        const d = destination.trim().toLowerCase();
+        filtered = filtered.filter(t => (t.destination || '').toLowerCase().includes(d) || (t.title || '').toLowerCase().includes(d) || (t.pickup || '').toLowerCase().includes(d));
+      }
+      const joinedTripIds = new Set(
+        targetId
+          ? memoryStore.trip_participants.filter(p => String(p.user_id) === targetId && p.status === 'JOINED').map(p => Number(p.trip_id))
+          : []
+      );
+      const result = filtered.map(t => ({
+        ...t,
+        is_joined: joinedTripIds.has(Number(t.id)) || Boolean(t.is_joined)
+      }));
+      return res.json(result);
+    }
+
+    let sql = `
+      SELECT tt.*, 
+             FALSE AS is_joined 
+      FROM travel_trips tt 
+      WHERE tt.status != 'CANCELLED'
+    `;
     let params = [];
 
+    if (targetId) {
+      sql = `
+        SELECT tt.*, 
+               EXISTS(
+                 SELECT 1 FROM trip_participants tp 
+                 WHERE tp.trip_id = tt.id 
+                   AND tp.status = 'JOINED' 
+                   AND (tp.user_id = ? OR tp.user_id = ? OR tp.user_id = ?)
+               ) AS is_joined 
+        FROM travel_trips tt 
+        WHERE tt.status != 'CANCELLED'
+      `;
+      params = [userId || '0', userUuid || '0', userEmail || '0'];
+    }
+
     if (destination && destination.trim()) {
-      sql += ' AND (destination LIKE ? OR title LIKE ? OR pickup LIKE ?)';
+      sql += ' AND (tt.destination LIKE ? OR tt.title LIKE ? OR tt.pickup LIKE ?)';
       const d = `%${destination.trim()}%`;
       params.push(d, d, d);
     }
 
-    sql += ' ORDER BY id DESC';
+    sql += ' ORDER BY tt.id DESC';
     const trips = await query(sql, params);
-    res.json(trips);
+    const result = trips.map(t => ({
+      ...t,
+      is_joined: Boolean(t.is_joined)
+    }));
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -717,7 +760,7 @@ app.post('/api/trips/:id/join', async (req, res, next) => {
   try {
     const { id } = req.params;
     const { userName, userId } = req.body;
-    const uidStr = userId ? String(userId) : (req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null);
+    const uidStr = userId ? String(userId) : (req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : null);
     const name = userName || req.headers['x-user-name'] || 'Student';
 
     if (!uidStr) {
@@ -725,15 +768,55 @@ app.post('/api/trips/:id/join', async (req, res, next) => {
     }
 
     if (isInMemoryFallback) {
-      await query('UPDATE travel_trips SET seats_left = GREATEST(seats_left - 1, 0) WHERE id = ?', [id]);
-      return res.json({ success: true, message: 'Joined trip successfully!' });
+      const existingIndex = memoryStore.trip_participants.findIndex(p => Number(p.trip_id) === Number(id) && String(p.user_id) === String(uidStr));
+      if (existingIndex >= 0 && memoryStore.trip_participants[existingIndex].status === 'JOINED') {
+        return res.status(409).json({ success: false, message: 'You have already joined this ride!' });
+      }
+      const t = memoryStore.travel_trips.find(x => Number(x.id) === Number(id));
+      if (!t || t.seats_left <= 0 || t.status === 'FULL' || t.status === 'CANCELLED') {
+        return res.status(409).json({ success: false, message: 'This ride is already full or cancelled!' });
+      }
+      t.seats_left = Math.max(0, t.seats_left - 1);
+      if (t.seats_left === 0) t.status = 'FULL';
+      if (existingIndex >= 0) {
+        memoryStore.trip_participants[existingIndex].status = 'JOINED';
+      } else {
+        memoryStore.trip_participants.push({ id: memoryStore.trip_participants.length + 1, trip_id: Number(id), user_id: String(uidStr), user_name: name, status: 'JOINED' });
+      }
+      if (t.host_user_id && String(t.host_user_id) !== String(uidStr)) {
+        memoryStore.user_notifications.push({
+          id: memoryStore.user_notifications.length + 1,
+          user_id: String(t.host_user_id),
+          type: 'JOIN_TRIP',
+          title: `🚕 ${name} Joined Your Ride`,
+          message: `${name} joined your travel pool: "${t.title}" (${t.date_time})`,
+          entity_type: 'TRIP',
+          entity_id: String(id),
+          is_read: false,
+          created_at: new Date().toISOString()
+        });
+      }
+      return res.json({ success: true, message: 'Joined trip successfully!', trip_id: Number(id), is_joined: true, seats_left: t.seats_left, status: t.status });
     }
+
+    let updatedSeatsLeft = 0;
+    let updatedStatus = 'ACTIVE';
 
     await withTransaction(async (conn) => {
       const [trips] = await conn.query('SELECT * FROM travel_trips WHERE id = ? FOR UPDATE', [id]);
-      if (trips.length === 0) throw new Error('Trip not found.');
+      if (trips.length === 0) {
+        const err = new Error('Trip not found.');
+        err.statusCode = 404;
+        throw err;
+      }
 
       const trip = trips[0];
+      if (trip.status === 'CANCELLED') {
+        const err = new Error('This ride has been cancelled.');
+        err.statusCode = 409;
+        throw err;
+      }
+
       if (trip.seats_left <= 0 || trip.status === 'FULL') {
         const err = new Error('This ride is already full!');
         err.statusCode = 409;
@@ -751,25 +834,39 @@ app.post('/api/trips/:id/join', async (req, res, next) => {
       }
 
       await conn.query(
-        'INSERT INTO trip_participants (trip_id, user_id, user_name, seats_joined, status) VALUES (?, ?, ?, 1, "JOINED") ON DUPLICATE KEY UPDATE status = "JOINED"',
-        [id, uidStr, name]
+        'INSERT INTO trip_participants (trip_id, user_id, user_name, seats_joined, status) VALUES (?, ?, ?, 1, "JOINED") ON DUPLICATE KEY UPDATE status = "JOINED", user_name = ?',
+        [id, uidStr, name, name]
       );
 
-      const newSeatsLeft = trip.seats_left - 1;
-      const newStatus = newSeatsLeft === 0 ? 'FULL' : 'ACTIVE';
+      updatedSeatsLeft = Math.max(0, trip.seats_left - 1);
+      updatedStatus = updatedSeatsLeft === 0 ? 'FULL' : 'ACTIVE';
 
       await conn.query(
         'UPDATE travel_trips SET seats_left = ?, status = ? WHERE id = ?',
-        [newSeatsLeft, newStatus, id]
+        [updatedSeatsLeft, updatedStatus, id]
       );
 
-      await conn.query(
-        'INSERT INTO user_notifications (user_id, type, title, message) VALUES (NULL, "JOIN_TRIP", ?, ?)',
-        [`🚕 ${name} Joined a Ride`, `${name} joined the travel pool: "${trip.title}" (${trip.date_time})`]
-      );
+      if (trip.host_user_id && String(trip.host_user_id) !== String(uidStr)) {
+        await conn.query(
+          'INSERT INTO user_notifications (user_id, type, title, message, entity_type, entity_id) VALUES (?, "JOIN_TRIP", ?, ?, "TRIP", ?)',
+          [
+            String(trip.host_user_id),
+            `🚕 ${name} Joined Your Ride`,
+            `${name} joined your travel pool: "${trip.title}" (${trip.date_time})`,
+            String(id)
+          ]
+        );
+      }
     });
 
-    res.json({ success: true, message: 'Joined ride successfully!' });
+    res.json({
+      success: true,
+      message: 'Joined trip successfully!',
+      trip_id: Number(id),
+      is_joined: true,
+      seats_left: updatedSeatsLeft,
+      status: updatedStatus
+    });
   } catch (err) {
     if (err.statusCode) {
       return res.status(err.statusCode).json({ success: false, message: err.message });
@@ -781,16 +878,25 @@ app.post('/api/trips/:id/join', async (req, res, next) => {
 app.delete('/api/trips/:id/leave', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const uidStr = req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null;
+    const uidStr = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : null;
 
     if (!uidStr) {
       return res.status(401).json({ success: false, message: 'Authentication required to leave ride.' });
     }
 
     if (isInMemoryFallback) {
-      await query('UPDATE travel_trips SET seats_left = seats_left + 1 WHERE id = ?', [id]);
-      return res.json({ success: true, message: 'Left ride successfully!' });
+      const part = memoryStore.trip_participants.find(p => Number(p.trip_id) === Number(id) && String(p.user_id) === String(uidStr));
+      if (part) part.status = 'LEFT';
+      const t = memoryStore.travel_trips.find(x => Number(x.id) === Number(id));
+      if (t) {
+        t.seats_left = Math.min(t.seats_total, t.seats_left + 1);
+        if (t.status === 'FULL') t.status = 'ACTIVE';
+      }
+      return res.json({ success: true, message: 'Left ride successfully!', trip_id: Number(id), is_joined: false, seats_left: t?.seats_left, status: t?.status });
     }
+
+    let updatedSeatsLeft = 0;
+    let updatedStatus = 'ACTIVE';
 
     await withTransaction(async (conn) => {
       const [trips] = await conn.query('SELECT * FROM travel_trips WHERE id = ? FOR UPDATE', [id]);
@@ -802,14 +908,23 @@ app.delete('/api/trips/:id/leave', async (req, res, next) => {
         [id, uidStr]
       );
 
-      const newSeatsLeft = Math.min(trip.seats_total, trip.seats_left + 1);
+      updatedSeatsLeft = Math.min(trip.seats_total, trip.seats_left + 1);
+      updatedStatus = updatedSeatsLeft > 0 ? 'ACTIVE' : trip.status;
+
       await conn.query(
-        'UPDATE travel_trips SET seats_left = ?, status = "ACTIVE" WHERE id = ?',
-        [newSeatsLeft, id]
+        'UPDATE travel_trips SET seats_left = ?, status = ? WHERE id = ?',
+        [updatedSeatsLeft, updatedStatus, id]
       );
     });
 
-    res.json({ success: true, message: 'Left ride successfully.' });
+    res.json({
+      success: true,
+      message: 'Left ride successfully.',
+      trip_id: Number(id),
+      is_joined: false,
+      seats_left: updatedSeatsLeft,
+      status: updatedStatus
+    });
   } catch (err) {
     next(err);
   }

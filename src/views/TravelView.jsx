@@ -125,21 +125,46 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': String(currentUser?.id || currentUser?.uuid || 1),
-          'x-user-name': currentUser?.name || 'Suraj K'
+          'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
+          'x-user-name': currentUser?.name || 'Student'
         },
-        body: JSON.stringify({ userName: currentUser?.name || 'Suraj K' })
+        body: JSON.stringify({ userName: currentUser?.name || 'Student' })
       });
       if (res.ok) {
         setJoinedTrips((prev) => [...prev, tripId]);
         setCreatedTrips((prev) =>
-          prev.map((t) => (t.id === tripId ? { ...t, seats_left: Math.max(0, (t.seats_left || 1) - 1) } : t))
+          prev.map((t) => (t.id === tripId ? { ...t, seats_left: Math.max(0, (t.seats_left || 1) - 1), is_joined: true } : t))
         );
         onLogAction('JOIN_TRIP', `Joined ride share trip ID #${tripId}`);
         if (onRefreshTrips) onRefreshTrips();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || 'Could not join ride.');
       }
     } catch (err) {
       console.error('Error joining trip:', err);
+    }
+  };
+
+  const handleLeaveTrip = async (tripId) => {
+    try {
+      const res = await fetch(`/api/trips/${tripId}/leave`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
+          'x-user-name': currentUser?.name || 'Student'
+        }
+      });
+      if (res.ok) {
+        setJoinedTrips((prev) => prev.filter((id) => id !== tripId));
+        setCreatedTrips((prev) =>
+          prev.map((t) => (t.id === tripId ? { ...t, seats_left: (t.seats_left || 0) + 1, is_joined: false } : t))
+        );
+        onLogAction('LEAVE_TRIP', `Left ride share trip ID #${tripId}`);
+        if (onRefreshTrips) onRefreshTrips();
+      }
+    } catch (err) {
+      console.error('Error leaving trip:', err);
     }
   };
 
@@ -260,7 +285,9 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
       {/* Trips Cards Responsive Grid (1 col mobile, 2 md, 3 lg) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredTrips.map((trip) => {
-          const isJoined = joinedTrips.includes(trip.id);
+          const isJoined = Boolean(trip.is_joined || joinedTrips.includes(trip.id));
+          const isFull = trip.seats_left === 0 || trip.status === 'FULL';
+
           return (
             <div
               key={trip.id}
@@ -283,12 +310,14 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
 
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      trip.status === 'Today'
+                      isJoined
                         ? 'bg-emerald-100 text-emerald-700'
+                        : isFull
+                        ? 'bg-amber-100 text-amber-700'
                         : 'bg-slate-100 text-slate-700'
                     }`}
                   >
-                    {trip.status || 'Today'}
+                    {isJoined ? 'Joined' : isFull ? 'Full' : trip.status || 'Active'}
                   </span>
                 </div>
 
@@ -330,7 +359,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
                 )}
               </div>
 
-              {/* Action Buttons: Message & Join */}
+              {/* Action Buttons: Message & Join/Leave */}
               <div className="grid grid-cols-2 gap-3 pt-3">
                 <button
                   onClick={() => {
@@ -345,19 +374,22 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
 
                 {isJoined ? (
                   <button
-                    disabled
-                    className="py-3 px-4 bg-emerald-600 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20"
+                    onClick={() => handleLeaveTrip(trip.id)}
+                    title="Click to leave ride"
+                    className="py-3 px-4 bg-emerald-50 hover:bg-red-50 border border-emerald-200 hover:border-red-200 text-emerald-700 hover:text-red-700 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm group"
                   >
-                    <Check className="w-4 h-4" />
-                    Joined!
+                    <Check className="w-4 h-4 text-emerald-600 group-hover:hidden" />
+                    <X className="w-4 h-4 text-red-600 hidden group-hover:block" />
+                    <span className="group-hover:hidden">Joined</span>
+                    <span className="hidden group-hover:inline">Leave</span>
                   </button>
                 ) : (
                   <button
                     onClick={() => handleJoinTrip(trip.id)}
-                    disabled={trip.seats_left === 0}
+                    disabled={isFull}
                     className="py-3 px-4 bg-blue-600 text-white rounded-2xl font-bold text-xs hover:bg-blue-700 transition-colors shadow-md shadow-blue-600/20 disabled:opacity-50"
                   >
-                    {trip.seats_left === 0 ? 'Full' : 'Join Ride'}
+                    {isFull ? 'Full' : 'Join Ride'}
                   </button>
                 )}
               </div>
