@@ -18,7 +18,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = ENV.PORT || 5000;
+const PORT = ENV.PORT || 5001;
 
 const razorpayInstance = new Razorpay({
   key_id: ENV.RAZORPAY.KEY_ID,
@@ -893,6 +893,15 @@ app.get('*', (req, res) => {
 
 app.use(globalErrorHandler);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 GoMove Express Server listening on http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ PORT ${PORT} IS ALREADY IN USE BY ANOTHER PROCESS!`);
+    console.error(`💡 Free the port in PowerShell: Stop-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess -Force\n`);
+  } else {
+    console.error('Server error:', err);
+  }
 });
