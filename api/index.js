@@ -17,10 +17,17 @@ import { handleGoogleAuth } from '../server/modules/auth/auth.controller.js';
 const app = express();
 app.set('trust proxy', 1);
 
-const razorpayInstance = new Razorpay({
-  key_id: ENV.RAZORPAY.KEY_ID,
-  key_secret: ENV.RAZORPAY.KEY_SECRET
-});
+let razorpayInstance = null;
+try {
+  if (ENV.RAZORPAY?.KEY_ID && ENV.RAZORPAY?.KEY_SECRET) {
+    razorpayInstance = new Razorpay({
+      key_id: ENV.RAZORPAY.KEY_ID,
+      key_secret: ENV.RAZORPAY.KEY_SECRET
+    });
+  }
+} catch (e) {
+  console.warn('Razorpay init warning:', e.message);
+}
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cookieParser(ENV.COOKIES.SECRET));

@@ -38,6 +38,12 @@ export const memoryStore = {
 };
 
 export async function initDatabase() {
+  if (process.env.VERCEL) {
+    console.log('⚡ [Vercel Environment] Enabling instant in-memory database fallback.');
+    isInMemoryFallback = true;
+    return;
+  }
+
   try {
     let rootConn = null;
 
@@ -47,10 +53,16 @@ export async function initDatabase() {
         port: ENV.DB.PORT,
         user: ENV.DB.USER,
         password: ENV.DB.PASSWORD,
+        connectTimeout: 1500
       });
     } catch (authErr) {
+      if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+        console.warn('⚠️ Local MySQL unavailable. Enabling in-memory fallback.');
+        isInMemoryFallback = true;
+        return;
+      }
       console.warn(`⚠️ Authentication warning on port ${ENV.DB.PORT}. Attempting root fallbacks...`);
-      const fallbackPasswords = [ENV.DB.PASSWORD, 'root', '', '123456', 'admin', 'password', '1234', '12345'];
+      const fallbackPasswords = [ENV.DB.PASSWORD, 'root', '', '123456', 'admin', 'password'];
       for (const pass of fallbackPasswords) {
         try {
           rootConn = await mysql.createConnection({
@@ -58,6 +70,7 @@ export async function initDatabase() {
             port: ENV.DB.PORT,
             user: 'root',
             password: pass,
+            connectTimeout: 1000
           });
           break;
         } catch (e) {}
@@ -65,7 +78,9 @@ export async function initDatabase() {
     }
 
     if (!rootConn) {
-      throw new Error(`Failed to authenticate with MySQL server at ${ENV.DB.HOST}:${ENV.DB.PORT}`);
+      console.warn(`Failed to connect to MySQL server at ${ENV.DB.HOST}:${ENV.DB.PORT}. Switching to in-memory fallback.`);
+      isInMemoryFallback = true;
+      return;
     }
 
     await rootConn.query(`CREATE DATABASE IF NOT EXISTS \`${ENV.DB.NAME}\`;`);
