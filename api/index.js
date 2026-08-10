@@ -157,7 +157,7 @@ app.get('/api/rentals/vendor', authenticateToken, async (req, res, next) => {
 
     const myFleet = await query(
       `SELECT * FROM rentals 
-       WHERE (vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id IS NULL) 
+       WHERE (vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id = ?) 
          AND status != 'DELETED' 
        ORDER BY id DESC`,
       [userIdStr, userUuidStr, rawHeaderId, userEmailStr]
@@ -187,7 +187,7 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
     const vendorName = req.user.name || 'Campus Vendor';
     const defaultImage = image || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80';
     const rawHeaderId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
-    const vendorUserIdStr = String(req.user?.id || req.user?.uuid || rawHeaderId || '1');
+    const vendorUserIdStr = String(req.user?.uuid || req.user?.email || req.user?.id || rawHeaderId || 'vendor_' + Date.now());
 
     console.log('[VEHICLE_CREATE_START]', { vendorUserIdStr, user: req.user, title });
 

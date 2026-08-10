@@ -834,8 +834,9 @@ export async function query(sql, params = []) {
 
   if (lowerSql.includes('where vendor_user_id')) {
     const validUserIds = new Set(params.map(p => String(p)).filter(p => p && p !== '0' && p !== 'null' && p !== 'undefined'));
+    if (validUserIds.size === 0) return [];
     return memoryStore.rentals.filter(r => 
-      r.status !== 'DELETED' && (!r.vendor_user_id || validUserIds.size === 0 || validUserIds.has(String(r.vendor_user_id)))
+      r.status !== 'DELETED' && r.vendor_user_id && validUserIds.has(String(r.vendor_user_id))
     );
   }
 
