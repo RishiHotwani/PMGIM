@@ -98,11 +98,11 @@ export async function registerEmailUser({ name, email, password, batch, section,
     tokenHash,
     familyId,
     expiresAt,
-    userAgent: clientInfo.userAgent,
-    ipAddress: clientInfo.ip
+    userAgent: clientInfo?.userAgent,
+    ipAddress: clientInfo?.ip
   });
 
-  await logAuditActivity(user.id, user.name, 'USER_SIGNUP', `Registered email account for ${user.email}`, { ip: clientInfo.ip });
+  await logAuditActivity(user.id, user.name, 'USER_SIGNUP', `Registered email account for ${user.email}`, { ip: clientInfo?.ip });
 
   return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
 }
@@ -126,7 +126,7 @@ export async function loginEmailUser({ email, password }, clientInfo) {
   const isMatch = await comparePassword(password, user.password_hash);
   if (!isMatch) {
     const { newAttempts, lockTime } = await incrementFailedLogin(user.id, user.failed_login_attempts || 0);
-    await logAuditActivity(user.id, user.name, 'FAILED_LOGIN', `Failed login attempt ${newAttempts}/5`, { ip: clientInfo.ip });
+    await logAuditActivity(user.id, user.name, 'FAILED_LOGIN', `Failed login attempt ${newAttempts}/5`, { ip: clientInfo?.ip });
     
     if (lockTime) {
       const err = new Error('Account has been locked for 15 minutes due to multiple failed login attempts.');
@@ -150,11 +150,11 @@ export async function loginEmailUser({ email, password }, clientInfo) {
     tokenHash,
     familyId,
     expiresAt,
-    userAgent: clientInfo.userAgent,
-    ipAddress: clientInfo.ip
+    userAgent: clientInfo?.userAgent,
+    ipAddress: clientInfo?.ip
   });
 
-  await logAuditActivity(user.id, user.name, 'USER_LOGIN', `Email login successful for ${user.email}`, { ip: clientInfo.ip });
+  await logAuditActivity(user.id, user.name, 'USER_LOGIN', `Email login successful for ${user.email}`, { ip: clientInfo?.ip });
 
   return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
 }
@@ -185,7 +185,7 @@ export async function loginPhoneUser({ phone, password }, clientInfo) {
   const isMatch = await comparePassword(password, user.password_hash);
   if (!isMatch) {
     const { newAttempts, lockTime } = await incrementFailedLogin(user.id, user.failed_login_attempts || 0);
-    await logAuditActivity(user.id, user.name, 'FAILED_LOGIN', `Failed phone login attempt ${newAttempts}/5`, { ip: clientInfo.ip });
+    await logAuditActivity(user.id, user.name, 'FAILED_LOGIN', `Failed phone login attempt ${newAttempts}/5`, { ip: clientInfo?.ip });
     
     if (lockTime) {
       const err = new Error('Account has been locked for 15 minutes due to multiple failed login attempts.');
@@ -209,11 +209,11 @@ export async function loginPhoneUser({ phone, password }, clientInfo) {
     tokenHash,
     familyId,
     expiresAt,
-    userAgent: clientInfo.userAgent,
-    ipAddress: clientInfo.ip
+    userAgent: clientInfo?.userAgent,
+    ipAddress: clientInfo?.ip
   });
 
-  await logAuditActivity(user.id, user.name, 'USER_LOGIN', `Phone login successful for ${user.phone_number}`, { ip: clientInfo.ip });
+  await logAuditActivity(user.id, user.name, 'USER_LOGIN', `Phone login successful for ${user.phone_number}`, { ip: clientInfo?.ip });
 
   return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
 }
@@ -346,8 +346,8 @@ export async function rotateRefreshToken(rawRefreshToken, clientInfo) {
     tokenHash: newRefreshHash,
     familyId: storedToken.family_id,
     expiresAt,
-    userAgent: clientInfo.userAgent,
-    ipAddress: clientInfo.ip
+    userAgent: clientInfo?.userAgent,
+    ipAddress: clientInfo?.ip
   });
 
   return { accessToken: newAccessToken, refreshToken: newRawRefresh, user: sanitizeUserDTO(user) };
