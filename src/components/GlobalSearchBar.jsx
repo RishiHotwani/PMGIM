@@ -24,15 +24,15 @@ export default function GlobalSearchBar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Google-style recommended quick searches
+  // Explore Goa recommended popular places
   const popularSearches = [
-    { title: 'Honda Activa 6G Scooter', type: 'rental', tab: 'rentals', subtitle: '₹350/day · Sanquelim' },
-    { title: 'Honda City 1.5 i-VTEC', type: 'rental', tab: 'rentals', subtitle: '₹2200/day · Sunroof Sedan' },
-    { title: 'Hyundai Verna 1.5 Turbo', type: 'rental', tab: 'rentals', subtitle: '₹2400/day · Bose Audio' },
-    { title: 'Mandrem Beach & Lagoon', type: 'explore', tab: 'explore', subtitle: 'Beaches · 36 km' },
-    { title: 'Airport Share (MOPA to GIM)', type: 'travel', tab: 'travel', subtitle: 'Cab Share · ₹450 each' },
-    { title: 'Dudhsagar Waterfalls Trek', type: 'explore', tab: 'explore', subtitle: 'Waterfalls · Day Trip' },
-    { title: 'Fontainhas Latin Quarter', type: 'explore', tab: 'explore', subtitle: 'Cafes & History · Panjim' }
+    { title: 'Mandrem Beach & Lagoon', type: 'explore', tab: 'explore', subtitle: 'Pristine Beach & Serene Sunset · North Goa' },
+    { title: 'Fontainhas Latin Quarter', type: 'explore', tab: 'explore', subtitle: 'Heritage Architecture & Cafes · Panjim' },
+    { title: 'Dudhsagar Waterfalls Trek', type: 'explore', tab: 'explore', subtitle: 'Iconic Waterfalls & Jungle Jeep Trek' },
+    { title: 'Vagator & Chapora Fort', type: 'explore', tab: 'explore', subtitle: 'Dil Chahta Hai Fort & Sunset Cliff' },
+    { title: 'Palolem & Butterfly Island', type: 'explore', tab: 'explore', subtitle: 'White Sand Beach & Kayaking · South Goa' },
+    { title: 'Anjuna Flea Market & Sunset Spot', type: 'explore', tab: 'explore', subtitle: 'Handicrafts, Vibes & Cliff Cafes' },
+    { title: 'Divar Island Ferry Voyage', type: 'explore', tab: 'explore', subtitle: 'Scenic Ferry Ride & Village Trails' }
   ];
 
   // App-wide filtered results matching query
@@ -112,7 +112,7 @@ export default function GlobalSearchBar({
             setQuery(e.target.value);
             setIsOpen(true);
           }}
-          placeholder="Search Honda City, Activa 6G, Arambol beach, Airport cabs..."
+          placeholder="Search Explore Goa places (Mandrem beach, Fontainhas, Dudhsagar...)"
           className="w-full pl-12 pr-10 py-3.5 sm:py-4 bg-white/95 backdrop-blur-xl border border-white/80 rounded-2xl sm:rounded-3xl text-xs sm:text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/20 shadow-xl transition-all"
         />
 
@@ -137,7 +137,7 @@ export default function GlobalSearchBar({
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-1.5 text-xs font-black text-slate-900">
               <Sparkles className="w-4 h-4 text-blue-600" />
-              <span>{hasQuery ? 'App-Wide Search Results' : 'Google Recommendations & Suggestions'}</span>
+              <span>{hasQuery ? 'Search Results' : 'Recommended Explore Goa Places'}</span>
             </div>
 
             {hasQuery && (
