@@ -213,6 +213,17 @@ export async function storeRefreshToken({ userId, tokenHash, familyId, expiresAt
         [userId, tokenHash, familyId, expiresAt, userAgent || '', ipAddress || '']
       );
     } catch (e) {}
+  } else {
+    memoryStore.refresh_tokens.push({
+      id: memoryStore.refresh_tokens.length + 1,
+      user_id: userId,
+      token_hash: tokenHash,
+      family_id: familyId,
+      expires_at: expiresAt,
+      user_agent: userAgent || '',
+      ip_address: ipAddress || '',
+      is_revoked: false
+    });
   }
 }
 
@@ -225,7 +236,7 @@ export async function findRefreshTokenByHash(tokenHash) {
       return null;
     }
   }
-  return null;
+  return memoryStore.refresh_tokens.find(t => t.token_hash === tokenHash && !t.is_revoked) || null;
 }
 
 export async function revokeRefreshToken(tokenHash) {
@@ -233,6 +244,9 @@ export async function revokeRefreshToken(tokenHash) {
     try {
       await query('UPDATE refresh_tokens SET is_revoked = TRUE WHERE token_hash = ?', [tokenHash]);
     } catch (e) {}
+  } else {
+    const t = memoryStore.refresh_tokens.find(x => x.token_hash === tokenHash);
+    if (t) t.is_revoked = true;
   }
 }
 
@@ -241,6 +255,10 @@ export async function revokeTokenFamily(familyId) {
     try {
       await query('UPDATE refresh_tokens SET is_revoked = TRUE WHERE family_id = ?', [familyId]);
     } catch (e) {}
+  } else {
+    memoryStore.refresh_tokens.forEach(t => {
+      if (t.family_id === familyId) t.is_revoked = true;
+    });
   }
 }
 

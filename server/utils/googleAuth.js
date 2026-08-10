@@ -52,10 +52,10 @@ export async function verifyGoogleToken(googleInput) {
   try {
     const client = getOAuthClient();
     if (client && clientId) {
-      const ticket = await client.verifyIdToken({
-        idToken,
-        audience: clientId
-      });
+      const ticket = await Promise.race([
+        client.verifyIdToken({ idToken, audience: clientId }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Google verification network timeout')), 3000))
+      ]);
       const payload = ticket.getPayload();
       if (payload && payload.email) {
         return {
