@@ -316,13 +316,6 @@ export async function authenticateGoogleUser(googleInput, clientInfo) {
   return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
 }
 
-  try {
-    await logAuditActivity(user.id, user.name, 'USER_GOOGLE_LOGIN', `Google login successful for ${user.email}`, { ip: clientInfo.ip });
-  } catch (e) {}
-
-  return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
-}
-
 export async function rotateRefreshToken(rawRefreshToken, clientInfo) {
   if (!rawRefreshToken) {
     throw new Error('Refresh token is required.');
