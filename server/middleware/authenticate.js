@@ -42,10 +42,10 @@ export async function authenticateToken(req, res, next) {
       message: 'Authentication required. Access token missing.'
     });
   } catch (err) {
-    console.error('Authentication middleware error:', err);
-    return res.status(500).json({
+    console.warn('Authentication token invalid or expired:', err.message);
+    return res.status(401).json({
       success: false,
-      message: 'Authentication processing error.'
+      message: 'Authentication required. Token expired or invalid.'
     });
   }
 }

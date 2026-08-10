@@ -130,8 +130,11 @@ export async function handleRefreshToken(req, res, next) {
       accessToken
     });
   } catch (err) {
-    clearAuthCookies(res);
-    next(err);
+    try { clearAuthCookies(res); } catch (e) {}
+    return res.status(401).json({
+      success: false,
+      message: err.message || 'Invalid or expired refresh token.'
+    });
   }
 }
 

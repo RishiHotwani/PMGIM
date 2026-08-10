@@ -41,6 +41,7 @@ export async function initDatabase() {
   if (process.env.VERCEL) {
     console.log('⚡ [Vercel Environment] Enabling instant in-memory database fallback.');
     isInMemoryFallback = true;
+    seedMemoryData();
     return;
   }
 
