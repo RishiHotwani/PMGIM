@@ -555,7 +555,7 @@ app.get('/api/bookmarks', async (req, res, next) => {
     const bookmarks = await query(
       `SELECT DISTINCT ep.* FROM explore_places ep 
        INNER JOIN user_bookmarks ub ON ep.id = ub.place_id 
-       WHERE (ub.user_id = ? OR ub.user_id = ? OR ub.user_id = ?) ORDER BY ub.id DESC`,
+       WHERE (ub.user_id = ? OR ub.user_id = ? OR ub.user_id = ?) ORDER BY ep.id DESC`,
       [userId || '0', userUuid || '0', userEmail || '0']
     );
     res.json(bookmarks);
