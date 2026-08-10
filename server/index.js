@@ -703,6 +703,7 @@ app.post('/api/explore/:id/reviews', async (req, res, next) => {
       success: true,
       message: 'Review and rating submitted successfully!',
       id: result.insertId
+    });
   } catch (err) {
     next(err);
   }
