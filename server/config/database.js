@@ -59,6 +59,7 @@ export async function initDatabase() {
       if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
         console.warn('⚠️ Local MySQL unavailable. Enabling in-memory fallback.');
         isInMemoryFallback = true;
+        seedMemoryData();
         return;
       }
       console.warn(`⚠️ Authentication warning on port ${ENV.DB.PORT}. Attempting root fallbacks...`);
@@ -80,6 +81,7 @@ export async function initDatabase() {
     if (!rootConn) {
       console.warn(`Failed to connect to MySQL server at ${ENV.DB.HOST}:${ENV.DB.PORT}. Switching to in-memory fallback.`);
       isInMemoryFallback = true;
+      seedMemoryData();
       return;
     }
 
