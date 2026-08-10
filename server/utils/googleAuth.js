@@ -1,18 +1,18 @@
+import { OAuth2Client } from 'google-auth-library';
 import { ENV } from '../config/env.js';
 
 let oauthClientInstance = null;
 
-async function getOAuthClient() {
+function getOAuthClient() {
   const clientId = ENV.GOOGLE.CLIENT_ID;
   if (!clientId || !clientId.includes('.apps.googleusercontent.com')) {
     return null;
   }
   if (!oauthClientInstance) {
     try {
-      const { OAuth2Client } = await import('google-auth-library');
       oauthClientInstance = new OAuth2Client(clientId);
     } catch (e) {
-      console.warn('google-auth-library import warning:', e.message);
+      console.warn('google-auth-library init warning:', e.message);
     }
   }
   return oauthClientInstance;
@@ -50,7 +50,7 @@ export async function verifyGoogleToken(googleInput) {
 
   // 2. Cryptographic verification with google-auth-library
   try {
-    const client = await getOAuthClient();
+    const client = getOAuthClient();
     if (client && clientId) {
       const ticket = await client.verifyIdToken({
         idToken,

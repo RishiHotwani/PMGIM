@@ -5,15 +5,14 @@ let pool = null;
 export let isInMemoryFallback = false;
 
 export function checkWritePersistence(res) {
-  const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
-  const allowMemoryFallback = process.env.ALLOW_MEMORY_FALLBACK === 'true';
+  const disableMemory = process.env.DISABLE_MEMORY_FALLBACK === 'true';
 
-  if (isInMemoryFallback && isProd && !allowMemoryFallback) {
+  if (isInMemoryFallback && disableMemory) {
     if (res && !res.headersSent) {
       res.status(503).json({
         success: false,
         error: 'DATABASE_UNAVAILABLE',
-        message: 'Database persistence is unavailable. Write operations are disabled in production when database connection is lost.'
+        message: 'Database persistence is unavailable. Write operations disabled.'
       });
     }
     return false;
