@@ -23,7 +23,7 @@ const router = Router();
 // Validation Rules
 const signupValidation = [
   body('name').trim().notEmpty().withMessage('Full Name is required'),
-  body('email').trim().isEmail().withMessage('Valid GIM email address is required').normalizeEmail(),
+  body('email').trim().isEmail().withMessage('Valid email address is required').normalizeEmail(),
   body('password').isLength({ min: 12 }).withMessage('Password must be at least 12 characters long'),
   handleValidationErrors
 ];
