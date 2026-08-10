@@ -310,7 +310,7 @@ function MainAppContent() {
         </main>
 
         {/* Bottom Nav */}
-        <BottomNav activeTab={activeTab} setActiveTab={handleTabChange} />
+        <BottomNav activeTab={activeTab} setActiveTab={handleTabChange} currentUser={currentUser} />
       </div>
     </div>
   );

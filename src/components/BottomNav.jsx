@@ -1,11 +1,14 @@
 import React from 'react';
-import { Home, Bike, Compass, Users, User, Map } from 'lucide-react';
+import { Home, Bike, Compass, Users, User, Map, Store, BarChart3 } from 'lucide-react';
 
-export default function BottomNav({ activeTab, setActiveTab }) {
+export default function BottomNav({ activeTab, setActiveTab, currentUser }) {
+  const isVendor = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'rentals', label: 'Rentals', icon: Bike },
-    { id: 'planner', label: 'Planner', icon: Map },
+    ...(isVendor ? [{ id: 'vendor_portal', label: 'Vendor', icon: Store }] : []),
+    ...(isVendor ? [{ id: 'analytics', label: 'Stats', icon: BarChart3 }] : []),
     { id: 'explore', label: 'Explore', icon: Compass },
     { id: 'travel', label: 'Travel', icon: Users },
     { id: 'profile', label: 'Profile', icon: User },
