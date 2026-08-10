@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { ENV } from '../server/config/env.js';
-import { initDatabase, query, withTransaction, isInMemoryFallback, checkWritePersistence } from '../server/config/database.js';
+import { initDatabase, query, withTransaction, isInMemoryFallback, checkWritePersistence, memoryStore } from '../server/config/database.js';
 import { logAuditActivity } from '../server/utils/logger.js';
 import authRouter from '../server/modules/auth/auth.routes.js';
 import { globalRateLimiter } from '../server/middleware/rateLimiter.js';
