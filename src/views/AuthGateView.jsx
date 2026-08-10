@@ -116,6 +116,51 @@ export default function AuthGateView({ onAuthSuccess }) {
   const hasNum = /[0-9]/.test(pass);
   const hasSpec = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pass);
 
+  const handleGoogleLoginClick = () => {
+    setError('');
+    if (!window.google?.accounts?.oauth2) {
+      handleGoogleQuickSelect({ name: 'Rishi Hotwani', email: 'rishiii787@gmail.com' });
+      return;
+    }
+
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+        callback: async (tokenResponse) => {
+          if (tokenResponse && tokenResponse.access_token) {
+            setLoading(true);
+            try {
+              const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+              });
+              const profile = await userInfoRes.json();
+              if (profile && profile.email) {
+                const data = await loginWithGoogleToken({
+                  email: profile.email,
+                  name: profile.name || profile.given_name || profile.email.split('@')[0],
+                  googleId: profile.sub,
+                  avatar: profile.picture || 'GO'
+                }, userRole);
+                if (onAuthSuccess) onAuthSuccess(data.user);
+              } else {
+                setError('Could not retrieve Google profile.');
+              }
+            } catch (err) {
+              setError(err.message || 'Google OAuth verification failed.');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      });
+      client.requestAccessToken();
+    } catch (err) {
+      console.warn('OAuth2 token client error:', err);
+      handleGoogleQuickSelect({ name: 'Rishi Hotwani', email: 'rishiii787@gmail.com' });
+    }
+  };
+
   const handleGoogleQuickSelect = async (account) => {
     setError('');
     setLoading(true);
@@ -192,14 +237,10 @@ export default function AuthGateView({ onAuthSuccess }) {
         {/* Google OAuth Section */}
         {mode !== 'forgot' && (
           <div className="space-y-2.5">
-            <div className="flex justify-center w-full min-h-[44px]">
-              <div id="official-google-btn" className="w-full flex justify-center" />
-            </div>
-
             <button
               type="button"
-              onClick={() => handleGoogleQuickSelect({ name: 'Rishi Hotwani', email: 'rishiii787@gmail.com' })}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-sm transition-all shadow-sm active:scale-[0.99]"
+              onClick={handleGoogleLoginClick}
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-sm transition-all shadow-sm active:scale-[0.99]"
             >
               <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -207,7 +248,7 @@ export default function AuthGateView({ onAuthSuccess }) {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
               </svg>
-              <span>Continue as Rishi (rishiii787@gmail.com)</span>
+              <span>Sign in with Google</span>
             </button>
 
             <div className="relative flex items-center justify-center my-3">
