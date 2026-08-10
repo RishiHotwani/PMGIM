@@ -1220,4 +1220,6 @@ app.get('/api', (req, res) => {
 
 app.use(globalErrorHandler);
 
-export default app;
+export default function handler(req, res) {
+  return app(req, res);
+}
