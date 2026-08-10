@@ -45,18 +45,22 @@ app.use(express.static(path.join(__dirname, '../dist')));
 
 // Audit Activity Logger & Product Analytics Event Middleware
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api/') && !req.path.includes('/activities') && !req.path.includes('/admin/analytics')) {
-    const activityName = `${req.method} ${req.path}`;
-    const userId = req.headers['x-user-id'] || null;
-    const userName = req.headers['x-user-name'] || 'Guest';
+  try {
+    if (req.path && req.path.startsWith('/api/') && !req.path.includes('/activities') && !req.path.includes('/admin/analytics')) {
+      const activityName = `${req.method} ${req.path}`;
+      const userId = req.headers['x-user-id'] || null;
+      const userName = req.headers['x-user-name'] || 'Guest';
 
-    logAuditActivity(
-      userId,
-      userName,
-      'API_REQUEST',
-      activityName,
-      { path: req.path, method: req.method, query: req.query }
-    ).catch(err => console.error('Logging error:', err));
+      logAuditActivity(
+        userId,
+        userName,
+        'API_REQUEST',
+        activityName,
+        { path: req.path, method: req.method }
+      ).catch(err => console.error('Logging error:', err.message));
+    }
+  } catch (e) {
+    console.error('Middleware audit logging catch:', e.message);
   }
   next();
 });

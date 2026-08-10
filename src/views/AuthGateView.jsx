@@ -24,9 +24,11 @@ export default function AuthGateView({ onAuthSuccess }) {
 
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '460937107777-5lifbfpuskp3bcfifv00f68bs2qib4k6.apps.googleusercontent.com';
 
+  const gisInitializedRef = React.useRef(false);
+
   useEffect(() => {
     const renderGoogleButton = () => {
-      if (window.google?.accounts?.id) {
+      if (window.google?.accounts?.id && !gisInitializedRef.current) {
         try {
           window.google.accounts.id.initialize({
             client_id: GOOGLE_CLIENT_ID,
@@ -34,6 +36,7 @@ export default function AuthGateView({ onAuthSuccess }) {
             auto_select: false,
             cancel_on_tap_outside: false
           });
+          gisInitializedRef.current = true;
 
           const btnContainer = document.getElementById('official-google-btn');
           if (btnContainer) {
