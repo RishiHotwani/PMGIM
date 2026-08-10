@@ -63,7 +63,11 @@ app.use((req, res, next) => {
   next();
 });
 
-initDatabase();
+try {
+  initDatabase().catch(err => console.warn('initDatabase background warning:', err.message));
+} catch (e) {
+  console.warn('initDatabase sync warning:', e.message);
+}
 
 app.post('/api/auth/google', handleGoogleAuth);
 app.post('/api/auth/google/callback', handleGoogleAuth);
@@ -1220,6 +1224,7 @@ app.get('/api', (req, res) => {
 
 app.use(globalErrorHandler);
 
+export { app };
 export default function handler(req, res) {
   return app(req, res);
 }
