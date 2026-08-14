@@ -59,7 +59,7 @@ export default function AuthGateView({ onAuthSuccess }) {
 
     const timer = setTimeout(renderGoogleButton, 300);
     return () => clearTimeout(timer);
-  }, [GOOGLE_CLIENT_ID, mode]);
+  }, [GOOGLE_CLIENT_ID, mode, userRole]);
 
   const handleGisResponse = async (response) => {
     if (!response || !response.credential) {
@@ -119,7 +119,7 @@ export default function AuthGateView({ onAuthSuccess }) {
   const handleGoogleLoginClick = () => {
     setError('');
     if (!window.google?.accounts?.oauth2) {
-      handleGoogleQuickSelect({ name: 'Rishi Hotwani', email: 'rishiii787@gmail.com' });
+      setError('Google Sign-In not loaded. Please use email signup or try again.');
       return;
     }
 
@@ -157,25 +157,7 @@ export default function AuthGateView({ onAuthSuccess }) {
       client.requestAccessToken();
     } catch (err) {
       console.warn('OAuth2 token client error:', err);
-      handleGoogleQuickSelect({ name: 'Rishi Hotwani', email: 'rishiii787@gmail.com' });
-    }
-  };
-
-  const handleGoogleQuickSelect = async (account) => {
-    setError('');
-    setLoading(true);
-    try {
-      const data = await loginWithGoogleToken({
-        email: account.email,
-        name: account.name,
-        googleId: 'google_oauth_' + account.email.replace(/[^a-zA-Z0-9]/g, ''),
-        avatar: account.name ? account.name[0] : 'GO'
-      }, userRole);
-      if (onAuthSuccess) onAuthSuccess(data.user);
-    } catch (err) {
-      setError(err.message || 'Google authentication failed.');
-    } finally {
-      setLoading(false);
+      setError('Google login failed. Please try again or use email.');
     }
   };
 
@@ -250,7 +232,7 @@ export default function AuthGateView({ onAuthSuccess }) {
               </svg>
               <span>Sign in with Google</span>
             </button>
-
+            <div id="official-google-btn" className="flex justify-center"></div>
             <div className="relative flex items-center justify-center my-3">
               <div className="border-t border-slate-200 w-full" />
               <span className="bg-white px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 absolute">

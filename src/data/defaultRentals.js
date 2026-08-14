@@ -16,7 +16,9 @@ export const DEFAULT_RENTALS = [
     description: 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim. Clean helmets included.',
     location: 'GIM Main Gate',
     is_available: true,
-    status: 'ACTIVE'
+    status: 'ACTIVE',
+    vendor_phone: '+919876500001',
+    phone: '+919876500001'
   },
   {
     id: 2,
@@ -35,7 +37,9 @@ export const DEFAULT_RENTALS = [
     description: 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips & group airport travel.',
     location: 'Sanquelim Circle',
     is_available: true,
-    status: 'ACTIVE'
+    status: 'ACTIVE',
+    vendor_phone: '+919876500002',
+    phone: '+919876500002'
   },
   {
     id: 3,
@@ -54,6 +58,29 @@ export const DEFAULT_RENTALS = [
     description: 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa coastline exploration.',
     location: 'Bicholim / GIM Gate',
     is_available: true,
-    status: 'ACTIVE'
+    status: 'ACTIVE',
+    vendor_phone: '+919876500003',
+    phone: '+919876500003'
+  },
+  {
+    id: 4,
+    vendor_user_id: '1',
+    title: 'Royal Enfield Hunter 350',
+    vendor: 'North Goa Bike Rentals',
+    category: 'Bike',
+    price_per_day: 750,
+    rating: 4.8,
+    total_ratings: 65,
+    distance: '1.0 km away',
+    fuel: 'Petrol',
+    transmission: 'Manual',
+    tags: 'Cruiser,Helmets Included',
+    image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80',
+    description: 'Comfortable 350cc cruiser bike perfect for scenic coastal highway rides.',
+    location: 'GIM Main Gate',
+    is_available: true,
+    status: 'ACTIVE',
+    vendor_phone: '+919876500004',
+    phone: '+919876500004'
   }
 ];

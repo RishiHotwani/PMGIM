@@ -39,8 +39,14 @@ try {
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cookieParser(ENV.COOKIES.SECRET));
 
+const allowedOrigins = ENV.CORS?.ALLOWED_ORIGINS ? ENV.CORS.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : null;
 app.use(cors({
-  origin: true,
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (!allowedOrigins || allowedOrigins.length === 0) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(null, true);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-user-name', 'x-user-uuid', 'x-user-email']
@@ -93,29 +99,34 @@ app.get('/api/users/profile', authenticateToken, async (req, res, next) => {
   }
 });
 
-app.patch('/api/auth/role', async (req, res, next) => {
+app.patch('/api/auth/role', authenticateToken, async (req, res, next) => {
   try {
-    const rawUserId = req.headers['x-user-id'] || (req.user ? (req.user.id || req.user.uuid || req.user.email) : null);
     const { role } = req.body;
+    const authenticatedId = String(req.user.id || req.user.uuid);
+    const authenticatedEmail = req.user.email ? String(req.user.email) : null;
 
-    if (!rawUserId) {
-      return res.status(401).json({ success: false, message: 'Authentication required to update role.' });
+    // Only allow USER <-> VENDOR self-switch; ADMIN promotion not allowed via this endpoint
+    const allowedRoles = ['USER', 'VENDOR'];
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({ success: false, message: 'Invalid role. Allowed: USER, VENDOR.' });
     }
+    const newRole = role;
 
-    const newRole = (role === 'VENDOR' || role === 'ADMIN') ? role : 'USER';
-    const parsedIntId = parseInt(rawUserId, 10);
-
+    // Enforce self-only update: authenticated user can only change own role
+    const parsedIntId = parseInt(authenticatedId, 10);
     if (!isNaN(parsedIntId)) {
       await query('UPDATE users SET role = ? WHERE id = ?', [newRole, parsedIntId]);
+    } else if (authenticatedEmail) {
+      await query('UPDATE users SET role = ? WHERE uuid = ? OR email = ?', [newRole, authenticatedId, authenticatedEmail]);
     } else {
-      await query('UPDATE users SET role = ? WHERE uuid = ? OR email = ?', [newRole, String(rawUserId), String(rawUserId)]);
+      await query('UPDATE users SET role = ? WHERE uuid = ?', [newRole, authenticatedId]);
     }
 
     res.json({
       success: true,
       message: `Account role updated to ${newRole}`,
       role: newRole,
-      user: { id: rawUserId, role: newRole }
+      user: { id: authenticatedId, role: newRole }
     });
   } catch (err) {
     console.error('Role update error:', err);
@@ -127,25 +138,26 @@ app.patch('/api/auth/role', async (req, res, next) => {
 app.get('/api/rentals', async (req, res, next) => {
   try {
     const { category, search, available } = req.query;
-    let sql = "SELECT * FROM rentals WHERE status != 'DELETED'";
+    let sql = `SELECT r.*, COALESCE(r.vendor_phone, u.phone_number) AS vendor_phone_resolved FROM rentals r LEFT JOIN users u ON (u.id = r.vendor_user_id OR u.uuid = r.vendor_user_id OR u.email = r.vendor_user_id) WHERE r.status != 'DELETED'`;
     let params = [];
 
     if (category && category !== 'All') {
-      sql += ' AND category = ?';
+      sql += ' AND r.category = ?';
       params.push(category);
     }
     if (search && search.trim()) {
-      sql += ' AND (title LIKE ? OR vendor LIKE ? OR location LIKE ?)';
+      sql += ' AND (r.title LIKE ? OR r.vendor LIKE ? OR r.location LIKE ?)';
       const s = `%${search.trim()}%`;
       params.push(s, s, s);
     }
     if (available === 'true') {
-      sql += ' AND is_available = TRUE';
+      sql += ' AND r.is_available = TRUE';
     }
 
-    sql += ' ORDER BY id DESC';
+    sql += ' ORDER BY r.id DESC';
     const rentals = await query(sql, params);
-    res.json(rentals);
+    const mapped = rentals.map(r => ({ ...r, vendor_phone: r.vendor_phone_resolved || r.vendor_phone, phone: r.vendor_phone_resolved || r.vendor_phone }));
+    res.json(mapped);
   } catch (err) {
     next(err);
   }
@@ -158,8 +170,6 @@ app.get('/api/rentals/vendor', authenticateToken, async (req, res, next) => {
     const userUuidStr = String(req.user?.uuid || '');
     const userEmailStr = String(req.user?.email || '');
 
-    console.log('[RENTAL_VENDOR_FETCH]', { userIdStr, userUuidStr, rawHeaderId, userEmailStr });
-
     const myFleet = await query(
       `SELECT * FROM rentals 
        WHERE (vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id = ? OR vendor_user_id = ?) 
@@ -167,8 +177,6 @@ app.get('/api/rentals/vendor', authenticateToken, async (req, res, next) => {
        ORDER BY id DESC`,
       [userIdStr, userUuidStr, rawHeaderId, userEmailStr]
     );
-
-    console.log('[RENTAL_VENDOR_FETCH_RESULT]', { count: myFleet.length });
     res.json(myFleet);
   } catch (err) {
     next(err);
@@ -183,7 +191,7 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Forbidden. Vendor role required to post vehicle listings.' });
     }
 
-    const { title, category, price_per_day, fuel, transmission, tags, image, description, location } = req.body;
+    const { title, category, price_per_day, fuel, transmission, tags, image, description, location, vendor_phone } = req.body;
 
     if (!title || !price_per_day || !image) {
       return res.status(400).json({ success: false, message: 'Title, Price per day, and Image URL are required.' });
@@ -194,13 +202,18 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
     const defaultImage = image || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80';
     const rawHeaderId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
     const vendorUserIdStr = String(req.user?.uuid || req.user?.email || req.user?.id || rawHeaderId || 'vendor_' + Date.now());
-
-    console.log('[VEHICLE_CREATE_START]', { vendorUserIdStr, user: req.user, title });
+    let vendorPhoneVal = vendor_phone || req.user?.phone_number || req.user?.phone || null;
+    if (vendorPhoneVal) {
+      const d = String(vendorPhoneVal).replace(/\D/g,'');
+      if (d.length===10) vendorPhoneVal = `+91${d}`;
+      else if (d.length===12 && d.startsWith('91')) vendorPhoneVal = `+${d}`;
+      else if (d) vendorPhoneVal = `+${d}`;
+    }
 
     const result = await query(
       `INSERT INTO rentals 
-       (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available, status) 
-       VALUES (?, ?, ?, ?, ?, 5.0, 1, '0.5 km away', ?, ?, ?, ?, ?, ?, TRUE, 'ACTIVE')`,
+       (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, vendor_phone, is_available, status) 
+       VALUES (?, ?, ?, ?, ?, 5.0, 1, '0.5 km away', ?, ?, ?, ?, ?, ?, ?, TRUE, 'ACTIVE')`,
       [
         vendorUserIdStr,
         title,
@@ -212,15 +225,14 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
         tags || 'Verified Vendor',
         defaultImage,
         description || `${title} available for campus and Goa trip rentals.`,
-        location || 'Sanquelim / GIM Gate'
+        location || 'Sanquelim / GIM Gate',
+        vendorPhoneVal
       ]
     );
 
     const newId = result.insertId;
-    console.log('[VEHICLE_CREATE_DB_ID]', { insertId: newId });
 
     // IMMEDIATE BACKEND PERSISTENCE VERIFICATION
-    console.log('[VEHICLE_CREATE_VERIFY_DB]', { insertId: newId });
     const createdRows = await query("SELECT * FROM rentals WHERE id = ? AND status != 'DELETED'", [newId]);
 
     if (!createdRows || createdRows.length === 0) {
@@ -235,7 +247,6 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
     }
 
     const createdVehicle = createdRows[0];
-    console.log('[VEHICLE_CREATE_VERIFY_SUCCESS]', { insertId: newId, vehicle: createdVehicle });
 
     await query(
       'INSERT INTO user_notifications (user_id, type, title, message) VALUES (NULL, "VENDOR_POST_VEHICLE", ?, ?)',
@@ -301,6 +312,18 @@ app.patch('/api/rentals/:id', authenticateToken, async (req, res, next) => {
 app.patch('/api/rentals/:id/toggle', authenticateToken, async (req, res, next) => {
   try {
     const { id } = req.params;
+    const rentals = await query('SELECT vendor_user_id FROM rentals WHERE id = ? AND status != \'DELETED\'', [id]);
+    if (rentals.length === 0) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found.' });
+    }
+    const ownerId = String(rentals[0].vendor_user_id);
+    const requesterId = String(req.user.id || req.user.uuid);
+    const requesterEmail = req.user.email ? String(req.user.email) : '';
+    const isOwner = ownerId === requesterId || ownerId === String(req.user.uuid) || ownerId === requesterEmail;
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You do not own this vehicle.' });
+    }
     await query('UPDATE rentals SET is_available = NOT is_available WHERE id = ?', [id]);
     res.json({ success: true, message: 'Vehicle availability updated.' });
   } catch (err) {
@@ -311,10 +334,22 @@ app.patch('/api/rentals/:id/toggle', authenticateToken, async (req, res, next) =
 app.delete('/api/rentals/:id', authenticateToken, async (req, res, next) => {
   try {
     const { id } = req.params;
-    await query(
-      "UPDATE rentals SET status = 'DELETED', is_available = FALSE, deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND (vendor_user_id = ? OR ? IN ('ADMIN', 'SUPER_ADMIN'))",
-      [id, String(req.user.id), req.user.role]
-    );
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.user.role);
+    if (isAdmin) {
+      await query("UPDATE rentals SET status = 'DELETED', is_available = FALSE, deleted_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+    } else {
+      const requesterIds = [String(req.user.id), String(req.user.uuid), req.user.email ? String(req.user.email) : ''].filter(Boolean);
+      // Verify ownership before soft-delete
+      const rentals = await query('SELECT vendor_user_id FROM rentals WHERE id = ? AND status != \'DELETED\'', [id]);
+      if (rentals.length === 0) {
+        return res.status(404).json({ success: false, message: 'Vehicle not found.' });
+      }
+      const ownerId = String(rentals[0].vendor_user_id);
+      if (!requesterIds.includes(ownerId)) {
+        return res.status(403).json({ success: false, message: 'Forbidden. You do not own this vehicle.' });
+      }
+      await query("UPDATE rentals SET status = 'DELETED', is_available = FALSE, deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND vendor_user_id = ?", [id, ownerId]);
+    }
     res.json({ success: true, message: 'Vehicle listing soft-deleted successfully.' });
   } catch (err) {
     next(err);
@@ -465,14 +500,19 @@ app.post('/api/payments/create-order', async (req, res, next) => {
   }
 });
 
-app.post('/api/payments/verify', async (req, res, next) => {
+app.post('/api/payments/verify', authenticateToken, async (req, res, next) => {
   try {
     const { booking_id, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null;
+    const userId = String(req.user.id || req.user.uuid);
+
+    // Reject mock order bypass in production
+    if (razorpay_order_id && razorpay_order_id.startsWith('order_mock_') && process.env.NODE_ENV === 'production' && ENV.RAZORPAY.KEY_ID && !ENV.RAZORPAY.KEY_ID.includes('dummy')) {
+      return res.status(400).json({ success: false, message: 'Mock payment not allowed in production.' });
+    }
 
     let isSignatureValid = true;
 
-    if (razorpay_signature && !razorpay_order_id.startsWith('order_mock_')) {
+    if (razorpay_signature && razorpay_order_id && !razorpay_order_id.startsWith('order_mock_')) {
       const generatedSignature = crypto
         .createHmac('sha256', ENV.RAZORPAY.KEY_SECRET)
         .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -656,6 +696,29 @@ app.get('/api/explore', async (req, res, next) => {
   }
 });
 
+app.post('/api/explore', async (req, res, next) => {
+  try {
+    if (!checkWritePersistence(res)) return;
+    const { name, category, rating, distance, price, image, description, maps_url, best_time, est_cost, pro_tips } = req.body;
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName || !image || !description) {
+      return res.status(400).json({ success: false, message: 'Name, image URL and description are required.' });
+    }
+    const dup = await query('SELECT id FROM explore_places WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1', [trimmedName]);
+    if (dup && dup.length > 0) {
+      return res.status(409).json({ success: false, message: `Place "${trimmedName}" already exists — duplicate not allowed.` });
+    }
+    const validCategory = ['Beaches','Food','Nightlife','Waterfalls','Shopping'].includes(category) ? category : (category || 'Beaches');
+    const result = await query(
+      `INSERT INTO explore_places (name, category, rating, distance, price, image, description, maps_url, best_time, est_cost, pro_tips, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+      [trimmedName, validCategory, parseFloat(rating)||4.5, distance||'', price||est_cost||'₹400 / person', image, description, maps_url||null, best_time||'5:00 PM – 7:00 PM', est_cost||price||'₹400 / person', pro_tips||'']
+    );
+    const createdRows = await query('SELECT * FROM explore_places WHERE id = ?', [result.insertId]);
+    const created = createdRows[0] || { id: result.insertId, name: trimmedName, category: validCategory, image, description };
+    res.status(201).json({ success: true, message: 'Place added successfully', id: result.insertId, data: created, place: created });
+  } catch (err) { next(err); }
+});
+
 app.get('/api/explore/:id/reviews', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -781,15 +844,31 @@ app.post('/api/trips', async (req, res, next) => {
   try {
     if (!checkWritePersistence(res)) return;
 
-    const { title, destination, pickup, date_time, seats_total, vehicle_type, cost, description, userName, userInitials, batchInfo, userId } = req.body;
+    const { title, destination, pickup, date_time, seats_total, vehicle_type, cost, description, userName, userInitials, batchInfo, userId, contact_phone } = req.body;
     
     const hostId = userId ? String(userId) : (req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null);
     const seatsTotalNum = parseInt(seats_total, 10) || 4;
+    let normalizedContact = null;
+    if (contact_phone) {
+      const digits = String(contact_phone).replace(/\D/g, '');
+      if (digits.length === 10) normalizedContact = `+91${digits}`;
+      else if (digits.length === 12 && digits.startsWith('91')) normalizedContact = `+${digits}`;
+      else if (digits.length >= 10) normalizedContact = `+${digits}`;
+      else normalizedContact = String(contact_phone).trim();
+    }
+    if (!normalizedContact) {
+      const fallbackPhone = req.user?.phone_number || req.user?.phone || '';
+      if (fallbackPhone) {
+        const d = String(fallbackPhone).replace(/\D/g, '');
+        if (d.length === 10) normalizedContact = `+91${d}`;
+        else if (d.length >= 10) normalizedContact = `+${d}`;
+      }
+    }
 
     const result = await query(
       `INSERT INTO travel_trips 
-       (host_user_id, user_name, user_initials, batch_info, title, destination, pickup, date_time, seats_left, seats_total, vehicle_type, cost, description, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+       (host_user_id, user_name, user_initials, batch_info, title, destination, pickup, date_time, seats_left, seats_total, vehicle_type, cost, description, contact_phone, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
       [
         hostId,
         userName || 'Campus User',
@@ -803,7 +882,8 @@ app.post('/api/trips', async (req, res, next) => {
         seatsTotalNum,
         vehicle_type || 'Cab',
         cost || '₹400 each',
-        description || ''
+        description || '',
+        normalizedContact
       ]
     );
 
@@ -823,6 +903,7 @@ app.post('/api/trips', async (req, res, next) => {
       vehicle_type: vehicle_type || 'Cab',
       cost: cost || '₹400 each',
       description: description || '',
+      contact_phone: normalizedContact,
       status: 'ACTIVE'
     };
 

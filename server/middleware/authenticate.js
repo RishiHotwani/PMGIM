@@ -22,17 +22,21 @@ export async function authenticateToken(req, res, next) {
       }
     }
 
-    // Session / Header Fallback for authenticated active sessions
+    // Header fallback only for non-protected routes; vendor routes require real token
     if (req.headers['x-user-id']) {
       const rawHeaderId = String(req.headers['x-user-id']).trim();
       const parsedInt = parseInt(rawHeaderId, 10);
       const uname = req.headers['x-user-name'] || 'Vendor';
-
+      // For vendor-protected routes, do NOT fake role - require valid token
+      const isVendorProtected = req.path.includes('/rentals') && (req.method === 'POST' || req.path.includes('/vendor') || req.path.includes('/toggle') || req.method === 'DELETE');
+      if (isVendorProtected) {
+        return res.status(401).json({ success: false, message: 'Authentication required. Valid token missing.' });
+      }
       req.user = {
         id: !isNaN(parsedInt) ? parsedInt : rawHeaderId,
         uuid: rawHeaderId,
         name: uname,
-        role: 'VENDOR'
+        role: 'USER'
       };
       return next();
     }

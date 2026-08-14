@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Star, Heart, Compass, Info, Search, X, Sparkles, Filter } from 'lucide-react';
+import { MapPin, Star, Heart, Compass, Info, Search, X, Sparkles, Filter, Plus, AlertTriangle } from 'lucide-react';
 import SpotDetailModal from '../components/SpotDetailModal';
 
-export default function ExploreView({ places = [], onLogAction, currentUser, onToggleBookmark, initialSearchQuery = '', initialSpotId = null }) {
+export default function ExploreView({ places = [], onLogAction, currentUser, onToggleBookmark, initialSearchQuery = '', initialSpotId = null, onAddPlace }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
   const [selectedSpot, setSelectedSpot] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newPlace, setNewPlace] = useState({ name: '', category: 'Beaches', distance: '', price: '', image: '', description: '', maps_url: '', best_time: '', est_cost: '', pro_tips: '' });
+  const [addError, setAddError] = useState('');
+  const [addSuccess, setAddSuccess] = useState('');
+  const [submittingPlace, setSubmittingPlace] = useState(false);
 
   // Sync initial search query or spot selection if passed as props
   useEffect(() => {
@@ -62,6 +67,44 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
   const getMapsUrl = (spot) => {
     if (spot.maps_url) return spot.maps_url;
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' Goa')}`;
+  };
+
+  const isDuplicateName = (name) => {
+    const norm = String(name).trim().toLowerCase();
+    return places.some(p => String(p.name).trim().toLowerCase() === norm);
+  };
+
+  const handleSuggestPlace = async (e) => {
+    e.preventDefault();
+    setAddError('');
+    setAddSuccess('');
+    const normName = String(newPlace.name).trim();
+    if (!normName) { setAddError('Place name is required.'); return; }
+    if (isDuplicateName(normName)) { setAddError(`"${normName}" already exists — duplicate not allowed.`); return; }
+    if (!newPlace.image || !newPlace.description) { setAddError('Image URL and description are required.'); return; }
+    setSubmittingPlace(true);
+    try {
+      const res = await fetch('/api/explore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
+          'x-user-name': currentUser?.name || 'Student'
+        },
+        body: JSON.stringify(newPlace)
+      });
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error(data.message || data.error || 'Failed to add place');
+      const created = data.data || data.place || { ...newPlace, id: data.id };
+      if (onAddPlace) onAddPlace(created);
+      else if (onLogAction) onLogAction('SUGGEST_PLACE', `Suggested new place: ${normName}`);
+      setAddSuccess('Place added successfully!');
+      setNewPlace({ name: '', category: 'Beaches', distance: '', price: '', image: '', description: '', maps_url: '', best_time: '', est_cost: '', pro_tips: '' });
+      setTimeout(()=>{ setShowAddModal(false); setAddSuccess(''); }, 1000);
+      if (onLogAction) onLogAction('SUGGEST_PLACE', `Suggested new place: ${normName}`);
+    } catch (err) {
+      setAddError(err.message);
+    } finally { setSubmittingPlace(false); }
   };
 
   const popularChips = ['Chapora', 'Baga', 'Waterfalls', 'Old Goa', 'Dolphin', 'Nightlife', 'Forts'];
@@ -269,6 +312,68 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
           >
             Reset Filters & View All {places.length} Recommendations
           </button>
+        </div>
+      )}
+
+      {/* Floating + Button */}
+      <button
+        onClick={() => { setAddError(''); setAddSuccess(''); setShowAddModal(true); }}
+        className="fixed bottom-20 right-6 sm:bottom-8 sm:right-8 z-30 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-xl shadow-blue-600/40"
+        title="Suggest a new place"
+      >
+        <Plus className="w-7 h-7 stroke-[2.5]" />
+      </button>
+
+      {/* Add Place Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-extrabold text-lg text-slate-900">Suggest a New Place</h3>
+              <button onClick={()=>setShowAddModal(false)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100"><X className="w-5 h-5" /></button>
+            </div>
+            {addError && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-bold flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{addError}</div>}
+            {addSuccess && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-xs font-bold">{addSuccess}</div>}
+            {newPlace.name && isDuplicateName(newPlace.name) && !addError && <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs font-bold">Duplicate detected: a place with this name already exists.</div>}
+            <form onSubmit={handleSuggestPlace} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Place Name *</label>
+                <input type="text" required value={newPlace.name} onChange={e=>setNewPlace({...newPlace, name:e.target.value})} placeholder="e.g. Hidden Waterfall near Sattari" className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                  <select value={newPlace.category} onChange={e=>setNewPlace({...newPlace, category:e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                    <option>Beaches</option><option>Food</option><option>Nightlife</option><option>Waterfalls</option><option>Shopping</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Distance / Travel</label>
+                  <input type="text" value={newPlace.distance} onChange={e=>setNewPlace({...newPlace, distance:e.target.value})} placeholder="12 km · 20 min scooter" className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Image URL *</label>
+                <input type="url" required value={newPlace.image} onChange={e=>setNewPlace({...newPlace, image:e.target.value})} placeholder="https://..." className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Description *</label>
+                <textarea rows="3" required value={newPlace.description} onChange={e=>setNewPlace({...newPlace, description:e.target.value})} placeholder="Why students love it..." className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-xs font-bold text-slate-700 mb-1">Best Time</label><input type="text" value={newPlace.best_time} onChange={e=>setNewPlace({...newPlace, best_time:e.target.value})} placeholder="5 PM – 7 PM" className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" /></div>
+                <div><label className="block text-xs font-bold text-slate-700 mb-1">Est. Cost</label><input type="text" value={newPlace.est_cost} onChange={e=>setNewPlace({...newPlace, est_cost:e.target.value})} placeholder="₹400 / person" className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" /></div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Google Maps URL</label>
+                <input type="url" value={newPlace.maps_url} onChange={e=>setNewPlace({...newPlace, maps_url:e.target.value})} placeholder="https://www.google.com/maps/search/..." className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={()=>setShowAddModal(false)} className="w-1/3 py-3 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl">Cancel</button>
+                <button type="submit" disabled={submittingPlace || isDuplicateName(newPlace.name)} className="w-2/3 py-3 bg-blue-600 text-white font-extrabold text-xs rounded-xl hover:bg-blue-700 disabled:opacity-50"> {submittingPlace ? 'Adding...' : 'Add Place'}</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

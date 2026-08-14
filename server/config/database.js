@@ -190,6 +190,7 @@ export async function initDatabase() {
         image VARCHAR(500) NOT NULL,
         description TEXT NULL,
         location VARCHAR(255) DEFAULT 'Sanquelim / Campus',
+        vendor_phone VARCHAR(20) NULL,
         is_available BOOLEAN DEFAULT TRUE,
         status ENUM('ACTIVE', 'MAINTENANCE', 'DELETED') NOT NULL DEFAULT 'ACTIVE',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -205,6 +206,7 @@ export async function initDatabase() {
     const rentalAlterations = [
       "MODIFY COLUMN vendor_user_id VARCHAR(255) NULL",
       "ADD COLUMN status ENUM('ACTIVE', 'MAINTENANCE', 'DELETED') NOT NULL DEFAULT 'ACTIVE'",
+      "ADD COLUMN vendor_phone VARCHAR(20) NULL",
       "ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
       "ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"
     ];
@@ -351,6 +353,7 @@ export async function initDatabase() {
         date_time VARCHAR(255) NOT NULL,
         departure_date VARCHAR(50) NULL,
         departure_time VARCHAR(50) NULL,
+        contact_phone VARCHAR(20) NULL,
         seats_left INT NOT NULL,
         seats_total INT NOT NULL,
         vehicle_type VARCHAR(50) NOT NULL,
@@ -370,6 +373,7 @@ export async function initDatabase() {
       "ADD COLUMN destination VARCHAR(255) NULL",
       "ADD COLUMN departure_date VARCHAR(50) NULL",
       "ADD COLUMN departure_time VARCHAR(50) NULL",
+      "ADD COLUMN contact_phone VARCHAR(20) NULL",
       "ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
     ];
     for (const colDef of tripAlterations) {
@@ -491,17 +495,17 @@ export async function initDatabase() {
 async function seedInitialData() {
   try {
     const defaultRentals = [
-      ['1', 'Honda Activa 6G', 'Campus Scooters Sanquelim', 'Scooter', 350, 4.9, 142, '0.8 km away', 'Petrol', 'Automatic', 'Verified Vendor,Helmets Included', 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim. Clean helmets included.', 'GIM Main Gate', true, 'ACTIVE'],
-      ['1', 'Honda City 1.5 i-VTEC', 'Goa Coastal Drive Rentals', 'Car', 2200, 4.8, 98, '1.5 km away', 'Petrol', 'Automatic', 'Sunroof,Sedan,AC', 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips & group airport travel.', 'Sanquelim Circle', true, 'ACTIVE'],
-      ['1', 'Hyundai Verna 1.5 Turbo', 'Bicholim Self-Drive Motors', 'Car', 2400, 4.9, 84, '2.1 km away', 'Petrol', 'Manual', 'Turbo,Bose Audio,Ventilated Seats', 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa coastline exploration.', 'Bicholim / GIM Gate', true, 'ACTIVE'],
-      ['1', 'Royal Enfield Hunter 350', 'North Goa Bike Rentals', 'Bike', 750, 4.8, 65, '1.0 km away', 'Petrol', 'Manual', 'Cruiser,Helmets Included', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Comfortable 350cc cruiser bike perfect for scenic coastal highway rides.', 'GIM Main Gate', true, 'ACTIVE']
+      ['1', 'Honda Activa 6G', 'Campus Scooters Sanquelim', 'Scooter', 350, 4.9, 142, '0.8 km away', 'Petrol', 'Automatic', 'Verified Vendor,Helmets Included', 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim. Clean helmets included.', 'GIM Main Gate', '+919876500001', true, 'ACTIVE'],
+      ['1', 'Honda City 1.5 i-VTEC', 'Goa Coastal Drive Rentals', 'Car', 2200, 4.8, 98, '1.5 km away', 'Petrol', 'Automatic', 'Sunroof,Sedan,AC', 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips & group airport travel.', 'Sanquelim Circle', '+919876500002', true, 'ACTIVE'],
+      ['1', 'Hyundai Verna 1.5 Turbo', 'Bicholim Self-Drive Motors', 'Car', 2400, 4.9, 84, '2.1 km away', 'Petrol', 'Manual', 'Turbo,Bose Audio,Ventilated Seats', 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa coastline exploration.', 'Bicholim / GIM Gate', '+919876500003', true, 'ACTIVE'],
+      ['1', 'Royal Enfield Hunter 350', 'North Goa Bike Rentals', 'Bike', 750, 4.8, 65, '1.0 km away', 'Petrol', 'Manual', 'Cruiser,Helmets Included', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Comfortable 350cc cruiser bike perfect for scenic coastal highway rides.', 'GIM Main Gate', '+919876500004', true, 'ACTIVE']
     ];
 
     for (const r of defaultRentals) {
       const [existing] = await pool.query('SELECT id FROM rentals WHERE title = ? AND vendor = ? AND status != "DELETED"', [r[1], r[2]]);
       if (!existing || existing.length === 0) {
         await pool.query(
-          'INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, is_available, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, vendor_phone, is_available, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           r
         );
       }
@@ -565,9 +569,9 @@ async function seedInitialData() {
 
 function seedMemoryData() {
   memoryStore.rentals = [
-    { id: 1, vendor_user_id: '1', title: 'Honda Activa 6G', vendor: 'Campus Scooters Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.9, total_ratings: 142, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Verified Vendor,Helmets Included', image: 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', description: 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim.', location: 'GIM Main Gate', is_available: true, status: 'ACTIVE' },
-    { id: 2, vendor_user_id: '1', title: 'Honda City 1.5 i-VTEC', vendor: 'Goa Coastal Drive Rentals', category: 'Car', price_per_day: 2200, rating: 4.8, total_ratings: 98, distance: '1.5 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Sunroof,Sedan,AC', image: 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', description: 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips.', location: 'Sanquelim Circle', is_available: true, status: 'ACTIVE' },
-    { id: 3, vendor_user_id: '1', title: 'Hyundai Verna 1.5 Turbo', vendor: 'Bicholim Self-Drive Motors', category: 'Car', price_per_day: 2400, rating: 4.9, total_ratings: 84, distance: '2.1 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Turbo,Bose Audio,Ventilated Seats', image: 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', description: 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa driving.', location: 'Bicholim / GIM Gate', is_available: true, status: 'ACTIVE' }
+    { id: 1, vendor_user_id: '1', title: 'Honda Activa 6G', vendor: 'Campus Scooters Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.9, total_ratings: 142, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Verified Vendor,Helmets Included', image: 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', description: 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim.', location: 'GIM Main Gate', is_available: true, status: 'ACTIVE', vendor_phone: '+919876500001' },
+    { id: 2, vendor_user_id: '1', title: 'Honda City 1.5 i-VTEC', vendor: 'Goa Coastal Drive Rentals', category: 'Car', price_per_day: 2200, rating: 4.8, total_ratings: 98, distance: '1.5 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Sunroof,Sedan,AC', image: 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', description: 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips.', location: 'Sanquelim Circle', is_available: true, status: 'ACTIVE', vendor_phone: '+919876500002' },
+    { id: 3, vendor_user_id: '1', title: 'Hyundai Verna 1.5 Turbo', vendor: 'Bicholim Self-Drive Motors', category: 'Car', price_per_day: 2400, rating: 4.9, total_ratings: 84, distance: '2.1 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Turbo,Bose Audio,Ventilated Seats', image: 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', description: 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa driving.', location: 'Bicholim / GIM Gate', is_available: true, status: 'ACTIVE', vendor_phone: '+919876500003' }
   ];
 
   memoryStore.explore_places = [
@@ -603,7 +607,7 @@ function seedMemoryData() {
     { id: 1, place_id: 1, user_name: 'Rishi Hotwani', user_avatar: 'RH', rating: 5, comment: 'Amazing sunset spot!', created_at: new Date().toISOString() }
   ];
   memoryStore.travel_trips = [
-    { id: 1, user_name: 'Rahul Verma', user_initials: 'RV', batch_info: 'PGDM 2026', title: 'Airport Share (Goa MOPA to GIM Campus)', pickup: 'MOPA Airport Terminal', date_time: 'Today 6:00 PM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹450 each', description: 'Flight arrives 5:30 PM. 2 seats free for GIM students.', status: 'ACTIVE' }
+    { id: 1, user_name: 'Rahul Verma', user_initials: 'RV', batch_info: 'PGDM 2026', title: 'Airport Share (Goa MOPA to GIM Campus)', pickup: 'MOPA Airport Terminal', date_time: 'Today 6:00 PM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹450 each', description: 'Flight arrives 5:30 PM. 2 seats free for GIM students.', status: 'ACTIVE', contact_phone: '+919876543210' }
   ];
 }
 
@@ -792,6 +796,31 @@ export async function query(sql, params = []) {
     memoryStore.place_reviews.push(newRev);
     return { insertId: newRev.id };
   }
+  if (lowerSql.includes('select id from explore_places where lower(trim(name))')) {
+    const norm = String(params[0]).trim().toLowerCase();
+    const dup = memoryStore.explore_places.find(p => String(p.name).trim().toLowerCase() === norm);
+    return dup ? [dup] : [];
+  }
+  if (lowerSql.includes('insert into explore_places')) {
+    const newPlace = {
+      id: memoryStore.explore_places.length + 1,
+      name: params[0],
+      category: params[1],
+      rating: params[2] || 4.5,
+      distance: params[3] || '',
+      price: params[4] || '₹400 / person',
+      image: params[5],
+      description: params[6],
+      maps_url: params[7] || null,
+      best_time: params[8] || '5:00 PM – 7:00 PM',
+      est_cost: params[9] || '₹400 / person',
+      pro_tips: params[10] || '',
+      is_bookmarked: false,
+      is_active: true
+    };
+    memoryStore.explore_places.push(newPlace);
+    return { insertId: newPlace.id, affectedRows: 1 };
+  }
   if (lowerSql.includes('inner join user_bookmarks')) {
     const uid = String(params[0]);
     const bookmarkedIds = new Set(memoryStore.user_bookmarks.filter(b => String(b.user_id) === uid).map(b => Number(b.place_id)));
@@ -824,6 +853,7 @@ export async function query(sql, params = []) {
       image: params[8],
       description: params[9] || '',
       location: params[10] || 'Sanquelim / Campus Gate',
+      vendor_phone: params[11] || null,
       is_available: true,
       status: 'ACTIVE',
       created_at: new Date().toISOString()
@@ -857,7 +887,13 @@ export async function query(sql, params = []) {
     return { affectedRows: 1 };
   }
 
-  if (lowerSql.includes('from rentals')) return memoryStore.rentals.filter(r => r.status !== 'DELETED');
+  if (lowerSql.includes('from rentals')) {
+    return memoryStore.rentals.filter(r => r.status !== 'DELETED').map(r => {
+      const user = memoryStore.users.find(u => String(u.id)===String(r.vendor_user_id) || String(u.uuid)===String(r.vendor_user_id) || String(u.email)===String(r.vendor_user_id));
+      const resolved = r.vendor_phone || user?.phone_number || null;
+      return { ...r, vendor_phone: resolved, phone: resolved, vendor_phone_resolved: resolved };
+    });
+  }
 
   if (lowerSql.includes('insert into travel_trips')) {
     const newTrip = {
@@ -875,6 +911,7 @@ export async function query(sql, params = []) {
       vehicle_type: params[10],
       cost: params[11],
       description: params[12],
+      contact_phone: params[13] || null,
       status: 'ACTIVE',
       created_at: new Date().toISOString()
     };

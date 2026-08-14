@@ -218,9 +218,10 @@ export async function loginPhoneUser({ phone, password }, clientInfo) {
   return { user: sanitizeUserDTO(user), accessToken, refreshToken: rawToken };
 }
 
-export async function authenticateGoogleUser(googleInput, clientInfo) {
+export async function authenticateGoogleUser(googleInput, clientInfo, desiredRole = 'USER') {
   const googlePayload = await verifyGoogleToken(googleInput);
   const { googleId, email, name, avatar, emailVerified } = googlePayload;
+  const normalizedDesiredRole = desiredRole === 'VENDOR' ? 'VENDOR' : 'USER';
 
   if (!email) {
     const err = new Error('Google account must provide a verified email address.');
@@ -256,7 +257,7 @@ export async function authenticateGoogleUser(googleInput, clientInfo) {
         provider: 'GOOGLE',
         avatar: avatar || (name ? name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'GO'),
         emailVerified: emailVerified !== false,
-        role: 'USER'
+        role: normalizedDesiredRole
       });
     } catch (err) {
       console.warn('User creation warning:', err.message);
@@ -273,7 +274,7 @@ export async function authenticateGoogleUser(googleInput, clientInfo) {
       provider: 'GOOGLE',
       avatar: avatar || 'GO',
       email_verified: true,
-      role: 'USER'
+      role: normalizedDesiredRole
     };
   }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Bookmark, LogOut, Phone, ShieldCheck, Store, Sparkles, CheckCircle2 } from 'lucide-react';
+import { User, Mail, Bookmark, LogOut, Phone, ShieldCheck, Store, Sparkles, CheckCircle2, HelpCircle, ChevronDown } from 'lucide-react';
 import SpotDetailModal from '../components/SpotDetailModal';
 import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../context/AuthContext';
@@ -11,8 +11,18 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [updatingRole, setUpdatingRole] = useState(false);
   const [roleMsg, setRoleMsg] = useState('');
+  const [openFaq, setOpenFaq] = useState(null);
 
   const isVendorRole = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+
+  const faqs = [
+    { q: 'How does Car Pooling contact work?', a: 'Each Car Pooling ride now shows the host’s phone number and a direct WhatsApp button. Tap “Contact” on any ride to call or message the host directly — no in-app chat needed.' },
+    { q: 'How do I become a Vendor to list vehicles?', a: 'Go to Profile → Account Role Mode and tap “Upgrade to Vehicle Vendor”. Once upgraded, the Vendor Portal appears in the header where you can add Scooters, Bikes or Cars.' },
+    { q: 'Why do I need to add a phone number?', a: 'Your phone is shown to customers on your vehicle listings and to riders on your Car Pooling posts so they can reach you via Call/WhatsApp. Use a valid 10-digit Indian number.' },
+    { q: 'Can I suggest a new place in Explore Goa?', a: 'Yes — tap the + button in Explore Goa, fill the place name, category, image and description. The app blocks exact duplicate names (case-insensitive) to keep the list clean.' },
+    { q: 'How is duplicate place detection handled?', a: 'Both frontend and backend do a case-insensitive name check. If “Baga Beach” already exists, posting “baga beach” or “  Baga Beach ” will be rejected with a clear message.' },
+    { q: 'How does rental booking & payment work?', a: 'Browse Rentals, tap Book Now, pick dates and pay via Razorpay. Vendor contact (phone/WhatsApp) is visible on every listing so you can coordinate pickup directly.' },
+  ];
 
   const fetchPrivateBookmarks = async () => {
     const targetId = currentUser?.id || currentUser?.uuid || currentUser?.email;
@@ -208,6 +218,30 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* FAQs Section */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-md space-y-3">
+        <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+          <HelpCircle className="w-5 h-5 text-blue-600" />
+          FAQs
+        </h3>
+        <div className="divide-y divide-slate-100">
+          {faqs.map((faq, idx) => (
+            <div key={idx} className="py-2">
+              <button
+                onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
+                className="w-full flex items-center justify-between text-left py-2 gap-3"
+              >
+                <span className="text-xs font-bold text-slate-800">{faq.q}</span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${openFaq === idx ? 'rotate-180' : ''}`} />
+              </button>
+              {openFaq === idx && (
+                <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100 mt-1">{faq.a}</p>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 

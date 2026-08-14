@@ -9,7 +9,6 @@ import TravelView from './views/TravelView';
 import ProfileView from './views/ProfileView';
 import AuthGateView from './views/AuthGateView';
 import VendorPortalView from './views/VendorPortalView';
-import AdminAnalyticsView from './views/AdminAnalyticsView';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import * as rentalService from './services/rentalService';
 import { DEFAULT_EXPLORE_PLACES } from './data/defaultPlaces';
@@ -112,6 +111,11 @@ function MainAppContent() {
   const handleAddTrip = useCallback((newTrip) => {
     setTravelTrips((prev) => [newTrip, ...prev.filter((t) => String(t.id) !== String(newTrip.id))]);
   }, []);
+
+  const handleAddPlace = useCallback((newPlace) => {
+    setExplorePlaces((prev) => [newPlace, ...prev.filter((p) => String(p.id) !== String(newPlace.id) && String(p.name).trim().toLowerCase() !== String(newPlace.name).trim().toLowerCase())]);
+    fetchExplorePlaces();
+  }, [fetchExplorePlaces]);
 
   const fetchExploreAndTrips = useCallback(async () => {
     fetchExplorePlaces();
@@ -266,10 +270,6 @@ function MainAppContent() {
             />
           )}
 
-          {activeTab === 'analytics' && (
-            <AdminAnalyticsView />
-          )}
-
           {activeTab === 'explore' && (
             <ExploreView
               places={explorePlaces}
@@ -277,6 +277,7 @@ function MainAppContent() {
               currentUser={currentUser}
               onToggleBookmark={handleToggleBookmark}
               initialSearchQuery={exploreSearchQuery}
+              onAddPlace={handleAddPlace}
             />
           )}
 

@@ -24,10 +24,13 @@ const NO_CACHE_HEADERS = {
 };
 
 function getAuthHeaders(currentUser) {
-  return {
+  const token = (()=>{ try { return localStorage.getItem('gim_token'); } catch(e){ return null; } })();
+  const headers = {
     'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
     'x-user-name': currentUser?.name || 'Vendor'
   };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
 }
 
 // ─── PUBLIC RENTALS (read-only, no auth) ─────────────────────

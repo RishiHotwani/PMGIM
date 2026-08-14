@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bike, Shield, Clock, Star, MapPin, Search, Info, Fuel, Gauge, Car, X } from 'lucide-react';
+import { Bike, Shield, Clock, Star, MapPin, Search, Info, Fuel, Gauge, Car, X, Phone } from 'lucide-react';
 import BookingCheckoutModal from '../components/BookingCheckoutModal';
 
 export default function RentalsView({ rentals = [], loading = false, onLogAction, currentUser, onRefresh }) {
@@ -35,6 +35,20 @@ export default function RentalsView({ rentals = [], loading = false, onLogAction
     setSelectedVehicle(null);
     setCheckoutVehicle(vehicle);
     if (onLogAction) onLogAction('START_RENTAL_CHECKOUT', `Initiated checkout for vehicle: ${vehicle.title}`);
+  };
+
+  const normalizeWa = (phone) => {
+    if (!phone) return null;
+    const d = String(phone).replace(/\D/g,'');
+    if (d.length===10) return `91${d}`;
+    if (d.length===12 && d.startsWith('91')) return d;
+    if (d.length===11 && d.startsWith('0')) return `91${d.slice(1)}`;
+    return d;
+  };
+  const waLink = (phone, title) => {
+    const wa = normalizeWa(phone);
+    if (!wa) return null;
+    return `https://wa.me/${wa}?text=${encodeURIComponent(`Hi! I'm interested in renting "${title}". Is it available?`)}`;
   };
 
   return (
@@ -161,6 +175,23 @@ export default function RentalsView({ rentals = [], loading = false, onLogAction
                     {item.transmission || 'Manual'}
                   </span>
                 </div>
+                <div className="flex items-center gap-2 pt-2 flex-wrap">
+                  {(() => {
+                    const phone = item.vendor_phone || item.phone || item.vendorPhone || '+919876500001';
+                    return (
+                      <>
+                        <a href={`tel:${phone}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-xs font-bold hover:bg-emerald-100">
+                          <Phone className="w-3 h-3" /> {phone}
+                        </a>
+                        {waLink(phone, item.title) && (
+                          <a href={waLink(phone, item.title)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-500 text-white rounded-full text-xs font-extrabold hover:bg-emerald-600">
+                            WhatsApp
+                          </a>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
 
@@ -231,6 +262,23 @@ export default function RentalsView({ rentals = [], loading = false, onLogAction
                   {selectedVehicle.description || 'Verified rental vehicle. Clean helmets provided upon pickup. Valid driver license required.'}
                 </p>
               </div>
+
+              {(() => {
+                const phone = selectedVehicle.vendor_phone || selectedVehicle.phone || selectedVehicle.vendorPhone || '+919876500001';
+                return (
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center"><Phone className="w-5 h-5" /></div>
+                    <div className="flex-1">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Vendor Contact</p>
+                      <a href={`tel:${phone}`} className="font-extrabold text-slate-900">{phone}</a>
+                      <p className="text-[11px] text-slate-500">{selectedVehicle.vendor}</p>
+                    </div>
+                    {waLink(phone, selectedVehicle.title) && (
+                      <a href={waLink(phone, selectedVehicle.title)} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold">WhatsApp</a>
+                    )}
+                  </div>
+                );
+              })()}
 
               <button
                 onClick={() => handleProceedToCheckout(selectedVehicle)}

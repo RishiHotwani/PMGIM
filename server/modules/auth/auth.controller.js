@@ -81,6 +81,7 @@ export async function handleGoogleAuth(req, res, next) {
   try {
     const body = req.body || {};
     const credentialInput = body.credential || body.idToken || (body.email ? body : null);
+    const desiredRole = body.role === 'VENDOR' ? 'VENDOR' : 'USER';
 
     if (!credentialInput) {
       return res.status(400).json({
@@ -90,7 +91,7 @@ export async function handleGoogleAuth(req, res, next) {
     }
 
     const clientInfo = { userAgent: req.headers['user-agent'], ip: req.ip };
-    const { user, accessToken, refreshToken } = await authenticateGoogleUser(credentialInput, clientInfo);
+    const { user, accessToken, refreshToken } = await authenticateGoogleUser(credentialInput, clientInfo, desiredRole);
 
     try {
       setAuthCookies(res, accessToken, refreshToken);

@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run server\" \"vite\"",
     "server": "node server/index.js",
     "start": "concurrently \"npm run server\" \"vite\"",
-    "build": "node ./node_modules/vite/bin/vite.js build",
+    "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },

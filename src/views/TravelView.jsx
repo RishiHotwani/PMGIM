@@ -1,16 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Car, MapPin, Calendar, Plus, MessageSquare, Check, X, Send, Edit, Pencil } from 'lucide-react';
+import { Users, Car, MapPin, Calendar, Plus, Phone, Check, X, Send, Edit, Pencil } from 'lucide-react';
 import UserAvatar from '../components/UserAvatar';
 
 export default function TravelView({ trips = [], onLogAction, currentUser, onRefreshTrips, onAddTrip }) {
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [joinedTrips, setJoinedTrips] = useState([]);
-  const [messageModalTrip, setMessageModalTrip] = useState(null);
-  const [activeMessages, setActiveMessages] = useState([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [sendingMessage, setSendingMessage] = useState(false);
-  const [newMessageText, setNewMessageText] = useState('');
+  const [contactModalTrip, setContactModalTrip] = useState(null);
   const [createdTrips, setCreatedTrips] = useState([]);
   const [editingTrip, setEditingTrip] = useState(null);
   const [updatingTrip, setUpdatingTrip] = useState(false);
@@ -23,7 +19,8 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
     seats_total: 4,
     vehicle_type: 'Cab',
     cost: '₹500 each',
-    description: ''
+    description: '',
+    contact_phone: ''
   });
 
   const filterOptions = ['All', 'Airport', 'Railway Station', 'Panjim'];
@@ -35,73 +32,20 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
     return name.substring(0, 2).toUpperCase();
   };
 
-  const fetchTripMessages = async (tripId) => {
-    if (!tripId) return;
-    setLoadingMessages(true);
-    try {
-      const res = await fetch(`/api/trips/${tripId}/messages`, {
-        headers: {
-          'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
-          'x-user-name': currentUser?.name || 'Student'
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setActiveMessages(Array.isArray(data) ? data : []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch trip messages:', err);
-    } finally {
-      setLoadingMessages(false);
-    }
+  const normalizePhoneForWhatsApp = (phone) => {
+    if (!phone) return null;
+    const digits = String(phone).replace(/\D/g, '');
+    if (digits.length === 10) return `91${digits}`;
+    if (digits.length === 12 && digits.startsWith('91')) return digits;
+    if (digits.length === 11 && digits.startsWith('0')) return `91${digits.slice(1)}`;
+    return digits;
   };
 
-  useEffect(() => {
-    if (messageModalTrip?.id) {
-      fetchTripMessages(messageModalTrip.id);
-    } else {
-      setActiveMessages([]);
-    }
-  }, [messageModalTrip]);
-
-  const handleSendMessage = async (tripId) => {
-    if (!newMessageText.trim() || sendingMessage) return;
-    const msgText = newMessageText.trim();
-    setSendingMessage(true);
-
-    try {
-      const res = await fetch(`/api/trips/${tripId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': String(currentUser?.id || currentUser?.uuid || '1'),
-          'x-user-name': currentUser?.name || 'Student User'
-        },
-        body: JSON.stringify({ message: msgText, userName: currentUser?.name || 'Student User' })
-      });
-
-      if (res.ok) {
-        const resData = await res.json();
-        const created = resData.data || {
-          id: Date.now(),
-          trip_id: tripId,
-          sender_user_id: String(currentUser?.id || currentUser?.uuid || '1'),
-          sender_name: currentUser?.name || 'Student User',
-          message: msgText,
-          created_at: new Date().toISOString()
-        };
-
-        setActiveMessages((prev) => [...prev, created]);
-        if (onLogAction) {
-          onLogAction('MESSAGE_TRIP', `Sent message to ride host for trip ID #${tripId}: "${msgText}"`);
-        }
-        setNewMessageText('');
-      }
-    } catch (err) {
-      console.error('Error sending ride message:', err);
-    } finally {
-      setSendingMessage(false);
-    }
+  const getWhatsAppLink = (phone, trip) => {
+    const waDigits = normalizePhoneForWhatsApp(phone);
+    if (!waDigits) return null;
+    const msg = `Hi ${trip?.user_name || 'there'}! I saw your Car Pooling ride "${trip?.title || ''}" from ${trip?.pickup || ''} to ${trip?.destination || ''} on ${trip?.date_time || ''}. Is a seat still available?`;
+    return `https://wa.me/${waDigits}?text=${encodeURIComponent(msg)}`;
   };
 
   // Merge createdTrips with backend trips (createdTrips priority, deduplicated by ID)
@@ -183,7 +127,8 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         userName: currentUser?.name || 'Student User',
         userInitials: computedInitials,
         batchInfo: `${currentUser?.batch || 'PGDM 2026'} · ${currentUser?.section || 'Sec A'}`,
-        userId: currentUser?.id || currentUser?.uuid || ''
+        userId: currentUser?.id || currentUser?.uuid || '',
+        contact_phone: newTrip.contact_phone || currentUser?.phone_number || currentUser?.phone || ''
       };
 
       const res = await fetch('/api/trips', {
@@ -213,7 +158,8 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
           vehicle_type: payload.vehicle_type,
           cost: payload.cost,
           description: payload.description,
-          status: 'ACTIVE'
+          status: 'ACTIVE',
+          contact_phone: payload.contact_phone
         };
 
         if (onAddTrip) onAddTrip(createdRide);
@@ -228,7 +174,8 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
           seats_total: 4,
           vehicle_type: 'Cab',
           cost: '₹500 each',
-          description: ''
+          description: '',
+          contact_phone: ''
         });
 
         if (onRefreshTrips) onRefreshTrips();
@@ -290,7 +237,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
       {/* Header & Post Button Row */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">GIM Travel Buddy Board</h1>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">Car Pooling</h1>
           <p className="text-xs md:text-sm font-medium text-slate-500 mt-1">
             {trips ? trips.length : 4} rides currently open for cab sharing & group trips
           </p>
@@ -425,17 +372,37 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
                 )}
               </div>
 
-              {/* Action Buttons: Message & Join/Leave */}
+              {/* Contact Info / WhatsApp */}
+              {trip.contact_phone && (
+                <div className="pt-2 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                    <a href={`tel:${trip.contact_phone}`} className="hover:underline">{trip.contact_phone}</a>
+                    {getWhatsAppLink(trip.contact_phone, trip) && (
+                      <a
+                        href={getWhatsAppLink(trip.contact_phone, trip)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => onLogAction && onLogAction('CONTACT_WHATSAPP', `Opened WhatsApp for ride #${trip.id}`)}
+                        className="ml-auto px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-[11px] font-extrabold flex items-center gap-1"
+                      >
+                        WhatsApp
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Action Buttons: Contact & Join/Leave */}
               <div className="grid grid-cols-2 gap-3 pt-3">
                 <button
                   onClick={() => {
-                    setMessageModalTrip(trip);
-                    onLogAction('OPEN_CHAT', `Opened chat message modal with ${trip.user_name}`);
+                    setContactModalTrip(trip);
+                    onLogAction('OPEN_CONTACT', `Viewed contact for ${trip.user_name}`);
                   }}
                   className="py-3 px-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-xs hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
                 >
-                  <MessageSquare className="w-4 h-4 text-slate-500" />
-                  Message
+                  <Phone className="w-4 h-4 text-emerald-600" />
+                  Contact
                 </button>
 
                 {isJoined ? (
@@ -585,11 +552,24 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Phone / WhatsApp *</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="e.g. 9876543210"
+                  value={newTrip.contact_phone}
+                  onChange={(e) => setNewTrip({ ...newTrip, contact_phone: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Will be shown to others for Car Pooling contact via Phone & WhatsApp.</p>
+              </div>
+
               <button
                 type="submit"
                 className="w-full py-3.5 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-colors"
               >
-                Post Ride to Travel Board
+                Post Ride to Car Pooling
               </button>
             </form>
           </div>
@@ -696,76 +676,51 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         </div>
       )}
 
-      {/* Message / Chat Modal */}
-      {messageModalTrip && (
+      {/* Contact Info Modal */}
+      {contactModalTrip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 p-5 space-y-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <h3 className="font-extrabold text-base text-slate-900">Chat with {messageModalTrip.user_name}</h3>
-                <p className="text-xs text-slate-500 truncate max-w-[280px]">{messageModalTrip.title}</p>
+                <h3 className="font-extrabold text-base text-slate-900">Contact {contactModalTrip.user_name}</h3>
+                <p className="text-xs text-slate-500 truncate max-w-[280px]">{contactModalTrip.title}</p>
               </div>
-              <button onClick={() => setMessageModalTrip(null)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100">
+              <button onClick={() => setContactModalTrip(null)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100">
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            <div className="h-64 overflow-y-auto bg-slate-50/80 rounded-2xl p-4 space-y-3 border border-slate-100 text-xs">
-              {loadingMessages ? (
-                <div className="flex items-center justify-center h-full text-slate-400 font-medium">
-                  Loading chat history...
+            <div className="space-y-3">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
+                <UserAvatar user={{ name: contactModalTrip.user_name, avatar: contactModalTrip.user_initials }} className="w-12 h-12 text-sm" />
+                <div>
+                  <p className="font-extrabold text-sm text-slate-900">{contactModalTrip.user_name}</p>
+                  <p className="text-xs text-slate-500">{contactModalTrip.batch_info}</p>
                 </div>
-              ) : activeMessages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center p-4 space-y-2">
-                  <MessageSquare className="w-8 h-8 text-slate-300 stroke-[1.5]" />
-                  <p className="font-bold text-slate-700 text-xs">No messages yet</p>
-                  <p className="text-[11px] text-slate-400">Ask the ride host about pickup point & timing!</p>
+              </div>
+              {contactModalTrip.contact_phone ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
+                    <div className="w-10 h-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center"><Phone className="w-5 h-5" /></div>
+                    <div className="flex-1">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Phone / WhatsApp</p>
+                      <a href={`tel:${contactModalTrip.contact_phone}`} className="font-extrabold text-slate-900 hover:underline">{contactModalTrip.contact_phone}</a>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <a href={`tel:${contactModalTrip.contact_phone}`} className="py-3 px-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 text-center">
+                      <Phone className="w-4 h-4" /> Call Now
+                    </a>
+                    {getWhatsAppLink(contactModalTrip.contact_phone, contactModalTrip) && (
+                      <a href={getWhatsAppLink(contactModalTrip.contact_phone, contactModalTrip)} target="_blank" rel="noopener noreferrer" className="py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 text-center">
+                        WhatsApp
+                      </a>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 text-center">Contact directly to confirm pickup time and seat.</p>
                 </div>
               ) : (
-                activeMessages.map((msg) => {
-                  const currentUid = String(currentUser?.id || currentUser?.uuid || '');
-                  const isMe = currentUid ? String(msg.sender_user_id) === currentUid : msg.sender_name === currentUser?.name;
-                  const timeFormatted = msg.created_at
-                    ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : 'Just now';
-
-                  return (
-                    <div
-                      key={msg.id || Math.random()}
-                      className={`p-3 rounded-2xl max-w-[85%] text-xs shadow-sm space-y-1 ${
-                        isMe
-                          ? 'bg-blue-600 text-white ml-auto text-right rounded-br-none'
-                          : 'bg-white text-slate-800 border border-slate-200/80 mr-auto text-left rounded-bl-none'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3 text-[10px] opacity-80 font-bold mb-0.5">
-                        <span>{msg.sender_name}</span>
-                        <span className="font-normal text-[9px]">{timeFormatted}</span>
-                      </div>
-                      <p className="leading-relaxed font-medium">{msg.message}</p>
-                    </div>
-                  );
-                })
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-center text-xs text-amber-700 font-medium">No contact number provided for this ride.</div>
               )}
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <input
-                type="text"
-                placeholder="Type your message..."
-                value={newMessageText}
-                disabled={sendingMessage}
-                onChange={(e) => setNewMessageText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(messageModalTrip.id)}
-                className="flex-1 px-4 py-3 bg-slate-100 border border-slate-200 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              />
-              <button
-                onClick={() => handleSendMessage(messageModalTrip.id)}
-                disabled={sendingMessage || !newMessageText.trim()}
-                className="p-3 bg-blue-600 text-white rounded-2xl shadow-md hover:bg-blue-700 disabled:opacity-40 transition-all flex items-center justify-center shrink-0"
-              >
-                <Send className="w-4 h-4" />
-              </button>
             </div>
           </div>
         </div>
