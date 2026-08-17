@@ -130,7 +130,13 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fadeIn overflow-y-auto">
       <div className="bg-white rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl border border-slate-100 relative my-8">
-        {/* Close Button */}
+        {/* Back + Close Buttons */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 left-4 z-10 px-3 py-2 bg-white/90 backdrop-blur-md rounded-full text-slate-700 hover:bg-white shadow-md transition-all text-xs font-bold flex items-center gap-1"
+        >
+          ← Back
+        </button>
         <button
           onClick={onClose}
           className="absolute top-4 right-4 z-10 p-2.5 bg-white/80 backdrop-blur-md rounded-full text-slate-700 hover:bg-white shadow-md transition-all"

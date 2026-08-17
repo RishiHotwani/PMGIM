@@ -448,6 +448,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 p-6 relative space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <button onClick={() => setIsModalOpen(false)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-full text-xs font-bold text-slate-700">← Back</button>
               <h3 className="font-extrabold text-lg text-slate-900">Post Ride Share Trip</h3>
               <button onClick={() => setIsModalOpen(false)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100">
                 <X className="w-5 h-5" />

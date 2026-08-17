@@ -329,6 +329,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <button onClick={()=>setShowAddModal(false)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-full text-xs font-bold text-slate-700">← Back</button>
               <h3 className="font-extrabold text-lg text-slate-900">Suggest a New Place</h3>
               <button onClick={()=>setShowAddModal(false)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100"><X className="w-5 h-5" /></button>
             </div>

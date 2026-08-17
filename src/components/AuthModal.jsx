@@ -3,7 +3,7 @@ import { X, Lock, Mail, User, Phone, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function AuthModal({ isOpen, onClose, currentUser, onLoginSuccess, onLogout }) {
-  const { login, loginPhone, signup } = useAuth();
+  const { login, loginPhone, signup, loginWithGoogleToken } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [loginMode, setLoginMode] = useState('email'); // 'email' | 'phone'
   const [isVendorRole, setIsVendorRole] = useState(false);

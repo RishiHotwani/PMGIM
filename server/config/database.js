@@ -1,4 +1,6 @@
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 import { ENV } from './env.js';
 
 let pool = null;
@@ -562,6 +564,27 @@ async function seedInitialData() {
         await pool.query('INSERT INTO travel_trips (host_user_id, user_name, user_initials, batch_info, title, pickup, destination, date_time, departure_date, departure_time, seats_left, seats_total, vehicle_type, cost, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', t);
       }
     }
+
+    // Seed admin user sangini@gmail.com with ADMIN role for full access
+    try {
+      const [adminExisting] = await pool.query('SELECT id FROM users WHERE email = ?', ['sangini@gmail.com']);
+      if (!adminExisting || adminExisting.length === 0) {
+        const adminHash = await bcrypt.hash('Sangini@123456', 12);
+        const adminUuid = uuidv4();
+        await pool.query(
+          `INSERT INTO users (uuid, name, email, phone_number, password_hash, provider, avatar, email_verified, role, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [adminUuid, 'Sangini', 'sangini@gmail.com', '+919876543210', adminHash, 'EMAIL', 'SA', 1, 'ADMIN', 1]
+        );
+        console.log('✅ Seeded admin user: sangini@gmail.com / Sangini@123456 (ADMIN)');
+      } else {
+        // Ensure role is ADMIN and password is correct
+        const adminHash = await bcrypt.hash('Sangini@123456', 12);
+        await pool.query('UPDATE users SET role = ?, password_hash = ?, is_active = TRUE, email_verified = TRUE WHERE email = ?', ['ADMIN', adminHash, 'sangini@gmail.com']);
+        console.log('✅ Ensured admin user sangini@gmail.com has ADMIN role');
+      }
+    } catch (adminErr) {
+      console.warn('Admin seed warning:', adminErr.message);
+    }
   } catch (err) {
     console.error('Seed error:', err);
   }
@@ -609,6 +632,36 @@ function seedMemoryData() {
   memoryStore.travel_trips = [
     { id: 1, user_name: 'Rahul Verma', user_initials: 'RV', batch_info: 'PGDM 2026', title: 'Airport Share (Goa MOPA to GIM Campus)', pickup: 'MOPA Airport Terminal', date_time: 'Today 6:00 PM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹450 each', description: 'Flight arrives 5:30 PM. 2 seats free for GIM students.', status: 'ACTIVE', contact_phone: '+919876543210' }
   ];
+
+  // Seed admin user for in-memory fallback
+  (async () => {
+    try {
+      const hash = await bcrypt.hash('Sangini@123456', 12);
+      if (!memoryStore.users.find(u => u.email === 'sangini@gmail.com')) {
+        memoryStore.users.push({
+          id: 1,
+          uuid: uuidv4(),
+          name: 'Sangini',
+          email: 'sangini@gmail.com',
+          phone_number: '+919876543210',
+          password_hash: hash,
+          google_id: null,
+          provider: 'EMAIL',
+          avatar: 'SA',
+          email_verified: true,
+          role: 'ADMIN',
+          is_active: true,
+          failed_login_attempts: 0,
+          lock_until: null,
+          last_login: new Date(),
+          created_at: new Date(),
+          updated_at: new Date(),
+          deleted_at: null
+        });
+        console.log('✅ Seeded in-memory admin: sangini@gmail.com / Sangini@123456');
+      }
+    } catch (e) { console.warn('in-memory admin seed warning', e.message); }
+  })();
 }
 
 export async function withTransaction(callback) {

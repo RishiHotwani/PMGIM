@@ -48,18 +48,25 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Fallback to stored local user
+      // Fallback to stored local user only if token still exists (prevents zombie login)
       const storedUser = localStorage.getItem('gim_user');
-      if (storedUser) {
-        const userObj = JSON.parse(storedUser);
-        setCurrentUser(userObj);
+      if (storedUser && storedToken) {
+        try {
+          const userObj = JSON.parse(storedUser);
+          setCurrentUser(userObj);
+        } catch(e) {}
+      } else if (!storedToken) {
+        try { localStorage.removeItem('gim_user'); localStorage.removeItem('gim_token'); } catch(e){}
       }
     } catch (err) {
       console.warn('Session restore warning:', err.message);
-      try {
-        const storedUser = localStorage.getItem('gim_user');
-        if (storedUser) setCurrentUser(JSON.parse(storedUser));
-      } catch (e) {}
+      const token = (()=>{ try{return localStorage.getItem('gim_token');}catch(e){return null;}})();
+      if (token) {
+        try {
+          const storedUser = localStorage.getItem('gim_user');
+          if (storedUser) setCurrentUser(JSON.parse(storedUser));
+        } catch (e) {}
+      }
     } finally {
       setLoading(false);
     }
@@ -136,12 +143,16 @@ export function AuthProvider({ children }) {
   };
 
   const updateUserRole = async (newRole) => {
+    const token = (()=>{ try{ return localStorage.getItem('gim_token'); }catch(e){ return null; } })();
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
+      'x-user-name': currentUser?.name || 'User'
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch('/api/auth/role', {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-id': currentUser?.id || ''
-      },
+      headers,
       body: JSON.stringify({ role: newRole })
     });
     const data = await safeParseJson(res, 'Failed to update role');

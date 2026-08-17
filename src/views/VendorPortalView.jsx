@@ -318,6 +318,13 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <button
+                disabled={isModalBusy}
+                onClick={() => !isModalBusy && setShowAddModal(false)}
+                className={`px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-full text-xs font-bold text-slate-700 ${isModalBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                ← Back
+              </button>
               <h3 className="font-extrabold text-base text-slate-900">Post New Vehicle Listing</h3>
               <button
                 disabled={isModalBusy}
