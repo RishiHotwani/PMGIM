@@ -129,20 +129,25 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="bg-white rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl border border-slate-100 relative my-8">
-        {/* Back + Close Buttons */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 left-4 z-10 px-3 py-2 bg-white/90 backdrop-blur-md rounded-full text-slate-700 hover:bg-white shadow-md transition-all text-xs font-bold flex items-center gap-1"
-        >
-          ← Back
-        </button>
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2.5 bg-white/80 backdrop-blur-md rounded-full text-slate-700 hover:bg-white shadow-md transition-all"
-        >
-          <X className="w-5 h-5" />
-        </button>
+      <div className="bg-white rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl border border-slate-100 relative my-8 flex flex-col max-h-[90vh]">
+        {/* Sticky header with reachable Back + Close — fixed safe-area + large touch targets */}
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 bg-white/95 backdrop-blur-md border-b border-slate-100" style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
+          <button
+            onClick={onClose}
+            aria-label="Back"
+            className="min-h-[44px] min-w-[44px] px-4 py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-full text-xs font-extrabold flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+          >
+            ← Back
+          </button>
+          <span className="text-xs font-extrabold text-slate-600 truncate px-2">{vehicle.title}</span>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="min-h-[44px] min-w-[44px] p-2.5 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-700 transition-all flex items-center justify-center"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
         {bookingSuccess ? (
           /* Booking Success Screen */
@@ -316,9 +321,16 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
                 <CreditCard className="w-4 h-4" />
                 <span>{isProcessing ? 'Connecting to Razorpay...' : `Pay ₹${finalPayableTotal} with Razorpay`}</span>
               </button>
+              {/* Thumb-zone Back for phones */}
+              <button type="button" onClick={onClose} className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-2xl flex items-center justify-center gap-2 min-h-[44px]">← Back to Fleet</button>
             </form>
           </div>
         )}
+        {/* Bottom sticky Back for success screen too */}
+        <div className="sticky bottom-0 bg-white border-t border-slate-100 p-3 flex gap-2" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+          <button onClick={onClose} className="flex-1 py-3 bg-slate-900 text-white rounded-2xl font-extrabold text-xs min-h-[44px]">← Back</button>
+          <button onClick={onClose} className="px-5 py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold text-xs min-h-[44px] flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
       </div>
     </div>
   );

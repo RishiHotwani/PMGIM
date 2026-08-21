@@ -8,6 +8,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPlace, setNewPlace] = useState({ name: '', category: 'Beaches', distance: '', price: '', image: '', description: '', maps_url: '', best_time: '', est_cost: '', pro_tips: '' });
+  const [customCategory, setCustomCategory] = useState('');
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
   const [submittingPlace, setSubmittingPlace] = useState(false);
@@ -82,6 +83,9 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
     if (!normName) { setAddError('Place name is required.'); return; }
     if (isDuplicateName(normName)) { setAddError(`"${normName}" already exists — duplicate not allowed.`); return; }
     if (!newPlace.image || !newPlace.description) { setAddError('Image URL and description are required.'); return; }
+    const finalCategory = newPlace.category === 'Custom' ? customCategory.trim() : newPlace.category;
+    if (newPlace.category === 'Custom' && !finalCategory) { setAddError('Please enter a custom category name.'); return; }
+    const payload = { ...newPlace, category: finalCategory || 'Beaches' };
     setSubmittingPlace(true);
     try {
       const res = await fetch('/api/explore', {
@@ -91,7 +95,7 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
           'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
           'x-user-name': currentUser?.name || 'Student'
         },
-        body: JSON.stringify(newPlace)
+        body: JSON.stringify(payload)
       });
       const data = await res.json().catch(()=>({}));
       if (!res.ok) throw new Error(data.message || data.error || 'Failed to add place');
@@ -344,9 +348,12 @@ export default function ExploreView({ places = [], onLogAction, currentUser, onT
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
-                  <select value={newPlace.category} onChange={e=>setNewPlace({...newPlace, category:e.target.value})} className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-                    <option>Beaches</option><option>Food</option><option>Nightlife</option><option>Waterfalls</option><option>Shopping</option>
+                  <select value={newPlace.category} onChange={e=>{ setNewPlace({...newPlace, category:e.target.value}); if(e.target.value!=='Custom') setCustomCategory(''); }} className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                    <option>Beaches</option><option>Food</option><option>Nightlife</option><option>Waterfalls</option><option>Shopping</option><option>Forts</option><option>Heritage</option><option>Adventure</option><option>Custom</option>
                   </select>
+                  {newPlace.category === 'Custom' && (
+                    <input type="text" value={customCategory} onChange={e=>setCustomCategory(e.target.value)} placeholder="e.g. Forts, Temple, Lake" className="w-full mt-2 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs" />
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Distance / Travel</label>

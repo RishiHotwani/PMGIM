@@ -14,6 +14,7 @@ import * as rentalService from './services/rentalService';
 import { DEFAULT_EXPLORE_PLACES } from './data/defaultPlaces';
 import { DEFAULT_TRAVEL_TRIPS } from './data/defaultTrips';
 import { DEFAULT_RENTALS } from './data/defaultRentals';
+import { trackEvent, trackPageView } from './services/mixpanel';
 
 function MainAppContent() {
   const { currentUser, loading, logout, setCurrentUser } = useAuth();
@@ -159,9 +160,16 @@ function MainAppContent() {
 
   const [exploreSearchQuery, setExploreSearchQuery] = useState('');
 
+  // Track tab views in Mixpanel (evaluation criteria)
+  useEffect(() => {
+    trackPageView(activeTab);
+    trackEvent('Tab View', { tab: activeTab });
+  }, [activeTab]);
+
   // ─── TAB CHANGE (NO fetchData call — no double-fetch) ───────
   const handleTabChange = (newTab, queryParam = '') => {
     handleLogAction('SWITCH_TAB', `Switched active tab to: ${newTab}`);
+    trackEvent('Switch Tab', { to: newTab, query: queryParam });
     if (newTab === 'explore') {
       setExploreSearchQuery(typeof queryParam === 'string' ? queryParam : '');
     }

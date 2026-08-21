@@ -79,14 +79,13 @@ export default function SpotDetailModal({ spot, onClose, currentUser, onLogActio
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 relative max-h-[90vh] overflow-y-auto">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2.5 bg-white/80 backdrop-blur-md rounded-full text-slate-700 hover:bg-white shadow-md transition-all"
-        >
-          <X className="w-5 h-5" />
-        </button>
+      <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 relative max-h-[90vh] overflow-y-auto flex flex-col">
+        {/* Sticky header with reachable Back + Close */}
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 py-3 bg-white/95 backdrop-blur-md border-b border-slate-100" style={{ paddingTop: 'max(10px, env(safe-area-inset-top))' }}>
+          <button onClick={onClose} aria-label="Back" className="min-h-[44px] px-4 py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-full text-xs font-extrabold flex items-center gap-1.5 shadow-md active:scale-95">← Back</button>
+          <span className="text-xs font-bold text-slate-500 truncate">{spot.category}</span>
+          <button onClick={onClose} aria-label="Close" className="min-h-[44px] min-w-[44px] p-2.5 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-700 flex items-center justify-center"><X className="w-5 h-5" /></button>
+        </div>
 
         {/* Hero Image */}
         <div className="relative h-64 w-full bg-slate-100">

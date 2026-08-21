@@ -80,6 +80,7 @@ export async function fetchVendorFleet(currentUser) {
   try {
     const res = await fetch('/api/rentals/vendor', {
       signal: vendorFleetController.signal,
+      credentials: 'include',
       headers: {
         ...NO_CACHE_HEADERS,
         ...getAuthHeaders(currentUser)
@@ -89,6 +90,30 @@ export async function fetchVendorFleet(currentUser) {
     if (thisSeq !== vendorFleetSeq) return null;
 
     if (!res.ok) {
+      // Auto-retry once after silent refresh when token expired (15m)
+      if (res.status === 401) {
+        try {
+          const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            if (refreshData.accessToken) {
+              try { localStorage.setItem('gim_token', refreshData.accessToken); } catch {}
+              const retryRes = await fetch('/api/rentals/vendor', {
+                headers: {
+                  ...NO_CACHE_HEADERS,
+                  ...getAuthHeaders(currentUser),
+                  'Authorization': `Bearer ${refreshData.accessToken}`
+                },
+                credentials: 'include'
+              });
+              if (retryRes.ok) {
+                const retryData = await retryRes.json();
+                return Array.isArray(retryData) ? retryData : [];
+              }
+            }
+          }
+        } catch {}
+      }
       throw new Error(`GET /api/rentals/vendor failed: ${res.status}`);
     }
 

@@ -29,6 +29,7 @@
     "jsonwebtoken": "^9.0.2",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.378.0",
+    "mixpanel-browser": "^2.82.1",
     "mysql2": "^3.9.7",
     "postcss": "^8.4.38",
     "razorpay": "^2.9.8",

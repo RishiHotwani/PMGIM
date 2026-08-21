@@ -708,7 +708,8 @@ app.post('/api/explore', async (req, res, next) => {
     if (dup && dup.length > 0) {
       return res.status(409).json({ success: false, message: `Place "${trimmedName}" already exists — duplicate not allowed.` });
     }
-    const validCategory = ['Beaches','Food','Nightlife','Waterfalls','Shopping'].includes(category) ? category : (category || 'Beaches');
+    const allowed = ['Beaches','Food','Nightlife','Waterfalls','Shopping','Forts','Heritage','Adventure'];
+    const validCategory = allowed.includes(category) ? category : (category ? String(category).trim().slice(0,30) : 'Beaches');
     const result = await query(
       `INSERT INTO explore_places (name, category, rating, distance, price, image, description, maps_url, best_time, est_cost, pro_tips, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
       [trimmedName, validCategory, parseFloat(rating)||4.5, distance||'', price||est_cost||'₹400 / person', image, description, maps_url||null, best_time||'5:00 PM – 7:00 PM', est_cost||price||'₹400 / person', pro_tips||'']

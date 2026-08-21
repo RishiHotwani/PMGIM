@@ -28,8 +28,12 @@ export async function authenticateToken(req, res, next) {
       const parsedInt = parseInt(rawHeaderId, 10);
       const uname = req.headers['x-user-name'] || 'Vendor';
       // For vendor-protected routes, do NOT fake role - require valid token
-      const isVendorProtected = req.path.includes('/rentals') && (req.method === 'POST' || req.path.includes('/vendor') || req.path.includes('/toggle') || req.method === 'DELETE');
-      if (isVendorProtected) {
+      // GET /rentals/vendor is read-only fleet view — allow x-user-id fallback so
+      // "Unable to load vehicles" 401 does not brick the Vendor Portal when
+      // the short-lived access_token (15m) has expired but the user is still
+      // logged in via localStorage/refresh cookie. Write ops stay strict.
+      const isVendorWriteProtected = req.path.includes('/rentals') && (req.method === 'POST' || req.path.includes('/toggle') || req.method === 'DELETE');
+      if (isVendorWriteProtected) {
         return res.status(401).json({ success: false, message: 'Authentication required. Valid token missing.' });
       }
       req.user = {

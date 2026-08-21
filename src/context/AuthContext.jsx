@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { identifyUser, trackEvent } from '../services/mixpanel';
 
 const AuthContext = createContext(null);
 
@@ -12,11 +13,14 @@ export function AuthProvider({ children }) {
       try {
         localStorage.setItem('gim_user', JSON.stringify(user));
         if (accessToken) localStorage.setItem('gim_token', accessToken);
+        identifyUser(user);
+        trackEvent('User Session Saved', { user_id: user.id || user.uuid, email: user.email });
       } catch (e) {}
     } else {
       try {
         localStorage.removeItem('gim_user');
         localStorage.removeItem('gim_token');
+        trackEvent('User Session Cleared', {});
       } catch (e) {}
     }
   };
@@ -29,7 +33,7 @@ export function AuthProvider({ children }) {
         headers['Authorization'] = `Bearer ${storedToken}`;
       }
 
-      const res = await fetch('/api/auth/me', { headers });
+      const res = await fetch('/api/auth/me', { headers, credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.user) {
@@ -38,8 +42,8 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Try refresh endpoint
-      const refreshRes = await fetch('/api/auth/refresh', { method: 'POST' });
+      // Try refresh endpoint (needs cookies)
+      const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
       if (refreshRes.ok) {
         const refreshData = await refreshRes.json();
         if (refreshData.success && refreshData.user) {
@@ -48,15 +52,16 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // Fallback to stored local user only if token still exists (prevents zombie login)
+      // Fallback to stored local user — persist across reloads even if token expired
+      // (fixes "again asking to create account" after adding a place). We keep the
+      // stored user so Explore data remains visible; /api/auth/refresh will re-issue token.
       const storedUser = localStorage.getItem('gim_user');
-      if (storedUser && storedToken) {
+      if (storedUser) {
         try {
           const userObj = JSON.parse(storedUser);
           setCurrentUser(userObj);
+          identifyUser(userObj);
         } catch(e) {}
-      } else if (!storedToken) {
-        try { localStorage.removeItem('gim_user'); localStorage.removeItem('gim_token'); } catch(e){}
       }
     } catch (err) {
       console.warn('Session restore warning:', err.message);

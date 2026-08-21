@@ -360,19 +360,19 @@ export const DEFAULT_EXPLORE_PLACES = [
     pro_tips: 'Bring spare clothes if you plan to dip in the natural mineral spring water.'
   },
   {
-    id: 25,
-    name: 'Lamgau Rock-Cut Caves (Bicholim)',
-    category: 'Shopping',
-    rating: 4.7,
-    distance: '8 km · 15 min scooter',
+    id: 29,
+    name: 'St. Francis of Assisi Church (Bicholim)',
+    category: 'Heritage',
+    rating: 4.6,
+    distance: '6 km · 12 min scooter',
     price: 'Free Entry',
-    image: 'https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1476304884326-cd2c88572c5f?auto=format&fit=crop&w=800&q=80',
     is_bookmarked: false,
-    description: 'Hidden ancient 5th-century rock-cut Buddhist & Hindu caves nestled in dense areca nut plantations right near Bicholim campus.',
-    maps_url: 'https://www.google.com/maps/search/?api=1&query=Lamgau+Caves+Bicholim+Goa',
-    best_time: '9:00 AM – 5:00 PM',
+    description: 'Historic whitewashed Goan church on the hillock overlooking Bicholim town — Portuguese baroque façade, quiet courtyard and Sunday mass. Added per feedback to replace the incorrect Taj image.',
+    maps_url: 'https://www.google.com/maps/search/?api=1&query=St+Francis+Church+Bicholim+Goa',
+    best_time: '8:00 AM – 11:00 AM, 4:00 PM – 6:30 PM',
     est_cost: 'Free Entry',
-    pro_tips: 'Short scenic trek through local Goan palm groves; carry comfortable walking shoes.'
+    pro_tips: 'Visit during evening golden hour for the best photos of the façade and campus skyline.'
   },
   {
     id: 26,
