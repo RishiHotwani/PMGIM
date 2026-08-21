@@ -135,29 +135,6 @@ function MainAppContent() {
     };
   }, [currentUser]);
 
-  // Log user action to backend
-  const handleLogAction = async (type, description, details = '') => {
-    try {
-      await fetch('/api/activity', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser?.id || '',
-          'x-user-name': currentUser?.name || 'User'
-        },
-        body: JSON.stringify({
-          userId: currentUser?.id || null,
-          userName: currentUser?.name || 'Guest',
-          type,
-          description,
-          details
-        })
-      });
-    } catch (err) {
-      console.error('Log activity error:', err);
-    }
-  };
-
   const [exploreSearchQuery, setExploreSearchQuery] = useState('');
 
   // Track tab views in Mixpanel (evaluation criteria)
@@ -168,7 +145,6 @@ function MainAppContent() {
 
   // ─── TAB CHANGE (NO fetchData call — no double-fetch) ───────
   const handleTabChange = (newTab, queryParam = '') => {
-    handleLogAction('SWITCH_TAB', `Switched active tab to: ${newTab}`);
     trackEvent('Switch Tab', { to: newTab, query: queryParam });
     if (newTab === 'explore') {
       setExploreSearchQuery(typeof queryParam === 'string' ? queryParam : '');
@@ -251,7 +227,6 @@ function MainAppContent() {
             <HomeView
               currentUser={currentUser}
               setActiveTab={handleTabChange}
-              onLogAction={handleLogAction}
               places={explorePlaces}
               rentals={rentals}
               trips={travelTrips}
@@ -263,7 +238,6 @@ function MainAppContent() {
               rentals={rentals}
               loading={rentalsLoading}
               error={rentalsError}
-              onLogAction={handleLogAction}
               currentUser={currentUser}
               onRefresh={refreshRentals}
               onRefreshRentals={refreshRentals}
@@ -281,7 +255,6 @@ function MainAppContent() {
           {activeTab === 'explore' && (
             <ExploreView
               places={explorePlaces}
-              onLogAction={handleLogAction}
               currentUser={currentUser}
               onToggleBookmark={handleToggleBookmark}
               initialSearchQuery={exploreSearchQuery}
@@ -292,7 +265,6 @@ function MainAppContent() {
           {activeTab === 'planner' && (
             <TripPlannerView
               places={explorePlaces}
-              onLogAction={handleLogAction}
               currentUser={currentUser}
               onToggleBookmark={handleToggleBookmark}
             />
@@ -301,7 +273,6 @@ function MainAppContent() {
           {activeTab === 'travel' && (
             <TravelView
               trips={travelTrips}
-              onLogAction={handleLogAction}
               currentUser={currentUser}
               onRefreshTrips={fetchExploreAndTrips}
               onAddTrip={handleAddTrip}
@@ -313,7 +284,6 @@ function MainAppContent() {
               currentUser={currentUser}
               onLogout={handleLogout}
               places={explorePlaces}
-              onLogAction={handleLogAction}
             />
           )}
         </main>
