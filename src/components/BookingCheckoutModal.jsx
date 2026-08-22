@@ -68,12 +68,16 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
         handler: async function (response) {
           // 3. Verify Payment Signature
           try {
-            const verifyRes = await fetch('/api/payments/verify', {
+            const token = (()=>{ try{ return localStorage.getItem('gim_token'); } catch { return null; } })();
+            const makeVerify = (extraHeaders={}) => fetch('/api/payments/verify', {
               method: 'POST',
+              credentials: 'include',
               headers: {
                 'Content-Type': 'application/json',
-                'x-user-id': currentUser?.id || '',
-                'x-user-name': currentUser?.name || 'User'
+                'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
+                'x-user-name': currentUser?.name || 'User',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                ...extraHeaders
               },
               body: JSON.stringify({
                 booking_id: orderData.booking_id,
@@ -82,6 +86,19 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
                 razorpay_signature: response.razorpay_signature
               })
             });
+            let verifyRes = await makeVerify();
+            if (verifyRes.status === 401) {
+              try {
+                const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+                if (refreshRes.ok) {
+                  const rd = await refreshRes.json();
+                  if (rd.accessToken) {
+                    try { localStorage.setItem('gim_token', rd.accessToken); } catch {}
+                    verifyRes = await makeVerify({ 'Authorization': `Bearer ${rd.accessToken}` });
+                  }
+                }
+              } catch {}
+            }
 
             const verifyData = await verifyRes.json();
             if (verifyRes.ok && verifyData.success) {
@@ -113,6 +130,42 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
           }
         }
       };
+
+      // Temp/mock payments: when server returns order_mock_* (dummy keys or gateway down), simulate success without Razorpay UI
+      if (orderData.order_id && String(orderData.order_id).startsWith('order_mock_')) {
+        // Directly verify with mock payment
+        try {
+          const token2 = (()=>{ try{ return localStorage.getItem('gim_token'); } catch { return null; } })();
+          const verifyRes2 = await fetch('/api/payments/verify', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': String(currentUser?.id || currentUser?.uuid || ''),
+              'x-user-name': currentUser?.name || 'User',
+              ...(token2 ? { 'Authorization': `Bearer ${token2}` } : {}),
+            },
+            body: JSON.stringify({
+              booking_id: orderData.booking_id,
+              razorpay_order_id: orderData.order_id,
+              razorpay_payment_id: 'pay_mock_' + Date.now(),
+              razorpay_signature: 'mock_sig'
+            })
+          });
+          const vd2 = await verifyRes2.json();
+          if (verifyRes2.ok && vd2.success) {
+            setBookingSuccess(true);
+            if (onLogAction) onLogAction('PAYMENT_SUCCESS', `Paid ₹${serverTotalAmount} for ${vehicle.title} via temp payment`);
+          } else {
+            alert(vd2.message || 'Temp payment verification failed.');
+          }
+        } catch (e) {
+          alert('Temp payment error: ' + e.message);
+        } finally {
+          setIsProcessing(false);
+        }
+        return;
+      }
 
       if (window.Razorpay) {
         const rzp = new window.Razorpay(options);

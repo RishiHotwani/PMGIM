@@ -71,6 +71,21 @@ export default function PurchaseCheckoutModal({ vehicle, onClose, currentUser, o
         theme: { color: '#D97706' },
         modal: { ondismiss: () => setIsProcessing(false) }
       };
+      if (orderData.order_id && String(orderData.order_id).startsWith('order_mock_')) {
+        try {
+          const token2 = (()=>{ try{ return localStorage.getItem('gim_token'); } catch { return null; } })();
+          const verifyRes2 = await fetch('/api/purchases/verify', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'x-user-id': String(currentUser?.id || currentUser?.uuid || ''), 'x-user-name': currentUser?.name || 'User', ...(token2?{Authorization:`Bearer ${token2}`}:{}) },
+            body: JSON.stringify({ purchase_id: orderData.purchase_id, razorpay_order_id: orderData.order_id, razorpay_payment_id: 'pay_mock_'+Date.now(), razorpay_signature: 'mock_sig' })
+          });
+          const vd2 = await verifyRes2.json();
+          if (verifyRes2.ok && vd2.success) { setSuccess(true); if(onLogAction) onLogAction('PURCHASE_SUCCESS', `Bought ${vehicle.title} for ₹${serverTotal}`); if(onPurchaseSuccess) onPurchaseSuccess(); }
+          else alert(vd2.message||'Temp purchase failed');
+        } catch(e){ alert('Temp purchase error: '+e.message); } finally { setIsProcessing(false); }
+        return;
+      }
       if (window.Razorpay) { new window.Razorpay(options).open(); }
       else { alert('Razorpay SDK not loaded.'); setIsProcessing(false); }
     } catch (err) { alert(err.message); setIsProcessing(false); }
