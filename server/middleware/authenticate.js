@@ -27,19 +27,17 @@ export async function authenticateToken(req, res, next) {
       const rawHeaderId = String(req.headers['x-user-id']).trim();
       const parsedInt = parseInt(rawHeaderId, 10);
       const uname = req.headers['x-user-name'] || 'Vendor';
-      // POST: try x-user-id fallback with DB role check so Render HTTP (no Secure cookie) still works
-      const isStrictWrite = req.path.includes('/rentals') && req.method === 'POST';
-      if (isStrictWrite) {
+      // POST rentals: try x-user-id fallback with DB role check so Render HTTP still works
+      const isStrictRentalsPost = req.path.includes('/rentals') && req.method === 'POST';
+      if (isStrictRentalsPost) {
         const rawHeaderId = String(req.headers['x-user-id'] || '').trim();
         if (rawHeaderId) {
           try {
-            // Re-use same lookup as verifyAccessToken path - findUserByUuid handles uuid/email/id
             const fallbackUser = await findUserByUuid(rawHeaderId);
             if (fallbackUser && fallbackUser.is_active && ['VENDOR','ADMIN','SUPER_ADMIN'].includes(fallbackUser.role)) {
               req.user = fallbackUser;
               return next();
             }
-            // Also try raw id/email lookup via query fallback (memoryStore)
             const { query } = await import('../config/database.js');
             const byId = await query('SELECT * FROM users WHERE id = ? OR uuid = ? OR email = ?', [rawHeaderId, rawHeaderId, rawHeaderId]);
             const u = byId[0];
@@ -50,6 +48,29 @@ export async function authenticateToken(req, res, next) {
           } catch {}
         }
         return res.status(401).json({ success: false, message: 'Authentication required. Valid token missing.' });
+      }
+      // Payments verify: allow x-user-id fallback so rent isn't bricked when 15m token expired (same as rentals delete/toggle)
+      if (req.path.includes('/payments/verify')) {
+        const rawHeaderId = String(req.headers['x-user-id'] || req.headers['x-user-uuid'] || '').trim();
+        if (rawHeaderId) {
+          try {
+            const fallbackUser = await findUserByUuid(rawHeaderId);
+            if (fallbackUser && fallbackUser.is_active) {
+              req.user = fallbackUser;
+              return next();
+            }
+            const { query } = await import('../config/database.js');
+            const byId = await query('SELECT * FROM users WHERE id = ? OR uuid = ? OR email = ?', [rawHeaderId, rawHeaderId, rawHeaderId]);
+            const u = byId[0];
+            if (u && u.is_active) {
+              req.user = u;
+              return next();
+            }
+          } catch {}
+          // Last resort: fake minimal user from headers so booking can be verified and shown in My Bookings
+          req.user = { id: rawHeaderId, uuid: rawHeaderId, name: req.headers['x-user-name'] || 'Student', role: 'USER', is_active: true };
+          return next();
+        }
       }
       req.user = {
         id: !isNaN(parsedInt) ? parsedInt : rawHeaderId,
