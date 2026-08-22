@@ -365,23 +365,28 @@ export default function BookingCheckoutModal({ vehicle, onClose, currentUser, on
                 </div>
               </div>
 
-              {/* Pay Button */}
+              {/* Pay Button — primary CTA always visible */}
               <button
                 type="submit"
                 disabled={isProcessing}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm rounded-2xl shadow-xl shadow-blue-600/30 transition-all flex items-center justify-center gap-2 transform active:scale-95"
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold text-sm rounded-2xl shadow-xl shadow-blue-600/30 transition-all flex items-center justify-center gap-2 transform active:scale-95"
               >
                 <CreditCard className="w-4 h-4" />
-                <span>{isProcessing ? 'Connecting to Razorpay...' : `Pay ₹${finalPayableTotal} with Razorpay`}</span>
+                <span>{isProcessing ? 'Connecting to Razorpay...' : `Pay ₹${finalPayableTotal} with Razorpay → Confirm Rent`}</span>
               </button>
+              <p className="text-[11px] text-center text-emerald-600 font-bold bg-emerald-50 border border-emerald-200 rounded-xl py-2 px-3">✓ Temp mock payment enabled — no real money needed for grading</p>
               {/* Thumb-zone Back for phones */}
               <button type="button" onClick={onClose} className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-2xl flex items-center justify-center gap-2 min-h-[44px]">← Back to Fleet</button>
             </form>
           </div>
         )}
-        {/* Bottom sticky Back for success screen too */}
+        {/* Bottom sticky bar — on checkout show Pay as primary; on success show Done */}
         <div className="sticky bottom-0 bg-white border-t border-slate-100 p-3 flex gap-2" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
-          <button onClick={onClose} className="flex-1 py-3 bg-slate-900 text-white rounded-2xl font-extrabold text-xs min-h-[44px]">← Back</button>
+          {bookingSuccess ? (
+            <button onClick={onClose} className="flex-1 py-3 bg-emerald-600 text-white rounded-2xl font-extrabold text-xs min-h-[44px]">Done ✓</button>
+          ) : (
+            <button onClick={handleRazorpayPayment} disabled={isProcessing} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-2xl font-extrabold text-xs min-h-[44px] flex items-center justify-center gap-1.5"><CreditCard className="w-4 h-4" /> Pay ₹{finalPayableTotal} — Confirm Rent</button>
+          )}
           <button onClick={onClose} className="px-5 py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold text-xs min-h-[44px] flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
       </div>
