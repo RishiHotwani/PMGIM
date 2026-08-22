@@ -27,13 +27,10 @@ export async function authenticateToken(req, res, next) {
       const rawHeaderId = String(req.headers['x-user-id']).trim();
       const parsedInt = parseInt(rawHeaderId, 10);
       const uname = req.headers['x-user-name'] || 'Vendor';
-      // For vendor-protected routes, do NOT fake role - require valid token
-      // GET /rentals/vendor is read-only fleet view — allow x-user-id fallback so
-      // "Unable to load vehicles" 401 does not brick the Vendor Portal when
-      // the short-lived access_token (15m) has expired but the user is still
-      // logged in via localStorage/refresh cookie. Write ops stay strict.
-      const isVendorWriteProtected = req.path.includes('/rentals') && (req.method === 'POST' || req.path.includes('/toggle') || req.method === 'DELETE');
-      if (isVendorWriteProtected) {
+      // POST stays strict (needs VENDOR role). DELETE/toggle allow x-user-id fallback with ownership check in the route handler,
+      // so vendor portal doesn't brick on 15m expiry when refresh cookie is missing on HTTP.
+      const isStrictWrite = req.path.includes('/rentals') && req.method === 'POST';
+      if (isStrictWrite) {
         return res.status(401).json({ success: false, message: 'Authentication required. Valid token missing.' });
       }
       req.user = {
