@@ -22,7 +22,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.set('trust proxy', 1);
-const PORT = ENV.PORT || 5001;
+const PORT = parseInt(process.env.PORT || ENV.PORT || 5001, 10);
 
 let razorpayInstance = null;
 try {
@@ -1497,10 +1497,13 @@ app.get('*', (req, res) => {
 
 app.use(globalErrorHandler);
 
-freePort(PORT);
+// Only free port locally - skip on PaaS where lsof may be missing
+if (process.env.NODE_ENV !== 'production') {
+  try { freePort(PORT); } catch {}
+}
 
-const server = app.listen(PORT, () => {
-  console.log(`🚀 GoMove Express Server listening on http://localhost:${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 GoMove Express Server listening on 0.0.0.0:${PORT} (env PORT=${process.env.PORT})`);
 });
 
 server.on('error', (err) => {
