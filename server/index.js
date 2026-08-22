@@ -389,6 +389,9 @@ app.post('/api/payments/create-order', async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Rental vehicle not found or unavailable.' });
     }
     const rental = rentals[0];
+    if (rental.status === 'SOLD') {
+      return res.status(409).json({ success: false, message: 'This vehicle has been sold and is no longer available for rent.' });
+    }
 
     // Transactional Overlapping Booking Conflict Prevention
     const startStr = start_date || new Date().toISOString().split('T')[0];

@@ -220,15 +220,33 @@ export async function toggleAvailability(currentUser, vehicleId) {
 // ─── DELETE RENTAL (soft delete, authenticated) ─────────────
 
 export async function deleteRental(currentUser, vehicleId) {
-  const res = await fetch(`/api/rentals/${vehicleId}`, {
+  const makeRequest = (extraHeaders = {}) => fetch(`/api/rentals/${vehicleId}`, {
     method: 'DELETE',
+    credentials: 'include',
     headers: {
       ...NO_CACHE_HEADERS,
-      ...getAuthHeaders(currentUser)
+      ...getAuthHeaders(currentUser),
+      ...extraHeaders
     }
   });
 
-  const data = await res.json();
+  let res = await makeRequest();
+  let data = await res.json().catch(() => ({}));
+
+  // Silent refresh retry on 401 — same as toggle/fetchVendorFleet (15m expiry)
+  if (!res.ok && res.status === 401) {
+    try {
+      const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        if (refreshData.accessToken) {
+          try { localStorage.setItem('gim_token', refreshData.accessToken); } catch {}
+          res = await makeRequest({ 'Authorization': `Bearer ${refreshData.accessToken}` });
+          data = await res.json().catch(() => ({}));
+        }
+      }
+    } catch {}
+  }
 
   if (!res.ok || !data.success) {
     throw new Error(data.message || 'Failed to delete vehicle.');

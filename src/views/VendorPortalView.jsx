@@ -139,10 +139,13 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
     if (!window.confirm('Are you sure you want to remove this vehicle listing?')) return;
     try {
       await rentalService.deleteRental(currentUser, id);
+      setMsg('Vehicle removed successfully.');
+      setTimeout(()=>setMsg(''), 2500);
       await fetchMyFleet();
       if (onRefreshRentals) onRefreshRentals();
     } catch (err) {
       console.error('[VendorPortal] delete error:', err.message);
+      alert(err.message || 'Delete failed. Try logging out and back in if session expired.');
     }
   };
 
