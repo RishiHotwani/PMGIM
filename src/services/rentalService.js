@@ -132,20 +132,35 @@ export async function fetchVendorFleet(currentUser) {
 // ─── CREATE RENTAL (authenticated, VENDOR/ADMIN only) ────────
 
 export async function createRental(currentUser, formData) {
-  const res = await fetch('/api/rentals', {
+  const makeRequest = (extraHeaders = {}) => fetch('/api/rentals', {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...NO_CACHE_HEADERS,
-      ...getAuthHeaders(currentUser)
+      ...getAuthHeaders(currentUser),
+      ...extraHeaders
     },
     body: JSON.stringify(formData)
   });
-
-  const data = await res.json();
+  let res = await makeRequest();
+  let data = await res.json().catch(() => ({}));
+  if (!res.ok && res.status === 401) {
+    try {
+      const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        if (refreshData.accessToken) {
+          try { localStorage.setItem('gim_token', refreshData.accessToken); } catch {}
+          res = await makeRequest({ 'Authorization': `Bearer ${refreshData.accessToken}` });
+          data = await res.json().catch(() => ({}));
+        }
+      }
+    } catch {}
+  }
 
   if (!res.ok || !data.success) {
-    throw new Error(data.message || data.error?.message || 'Failed to save vehicle on server.');
+    throw new Error(data.message || data.error?.message || 'Failed to save vehicle on server. If on Render, try log out and log back in to refresh session.');
   }
 
   const createdVehicle = data.rental || data.data;
