@@ -7,6 +7,12 @@ export default function PurchaseCheckoutModal({ vehicle, onClose, currentUser, o
   const [userEmail, setUserEmail] = useState(currentUser?.email || '');
   const [isProcessing, setIsProcessing] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showTestCard, setShowTestCard] = useState(false);
+  const [cardNumber, setCardNumber] = useState('4111111111111111');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [cardError, setCardError] = useState('');
 
   if (!vehicle) return null;
 
@@ -87,8 +93,41 @@ export default function PurchaseCheckoutModal({ vehicle, onClose, currentUser, o
         return;
       }
       if (window.Razorpay) { new window.Razorpay(options).open(); }
-      else { alert('Razorpay SDK not loaded.'); setIsProcessing(false); }
+      else { alert('Razorpay SDK not loaded. Use Test Card below.'); setIsProcessing(false); }
     } catch (err) { alert(err.message); setIsProcessing(false); }
+  };
+  const handleTestCardBuy = async (e) => {
+    if(e) e.preventDefault();
+    setCardError('');
+    if (isSold) { setCardError('Already sold.'); return; }
+    if (isOwn) { setCardError('You cannot buy your own listing.'); return; }
+    if (!userName || !userEmail || !phone) { setCardError('Fill Name, Email, Phone.'); return; }
+    const cleanNum = cardNumber.replace(/\s/g,'');
+    if (!/^\d{13,19}$/.test(cleanNum)) { setCardError('Enter 13-19 digit test card (4111111111111111).'); return; }
+    if (!/^\d{3,4}$/.test(cardCvv)) { setCardError('CVV 3-4 digits.'); return; }
+    if (!/^(0[1-9]|1[0-2])\/\d{2,4}$/.test(cardExpiry)) { setCardError('Expiry MM/YY.'); return; }
+    if (!cardName.trim()) { setCardError('Cardholder name required.'); return; }
+    let sum=0,dbl=false; for(let i=cleanNum.length-1;i>=0;i--){let d=parseInt(cleanNum[i],10); if(dbl){d*=2; if(d>9)d-=9;} sum+=d; dbl=!dbl;}
+    if(sum%10!==0){ setCardError('Luhn failed — use 4111111111111111.'); return; }
+    setIsProcessing(true);
+    try {
+      const orderRes = await fetch('/api/purchases/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': String(currentUser?.id || currentUser?.uuid || ''), 'x-user-name': currentUser?.name || userName },
+        body: JSON.stringify({ rental_id: vehicle.id, user_name: userName, user_email: userEmail, user_phone: phone })
+      });
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) throw new Error(orderData.message || 'Order failed');
+      const token2 = (()=>{ try{return localStorage.getItem('gim_token')}catch{return null}})();
+      const verifyRes2 = await fetch('/api/purchases/verify', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': String(currentUser?.id || currentUser?.uuid || ''), 'x-user-name': currentUser?.name || userName, ...(token2?{Authorization:`Bearer ${token2}`}:{}) },
+        body: JSON.stringify({ purchase_id: orderData.purchase_id, razorpay_order_id: orderData.order_id, razorpay_payment_id: 'pay_testcard_'+Date.now(), razorpay_signature: 'mock_sig_testcard' })
+      });
+      const vd2 = await verifyRes2.json();
+      if (verifyRes2.ok && vd2.success) { setSuccess(true); if(onLogAction) onLogAction('PURCHASE_SUCCESS', `Test card bought ${vehicle.title}`); if(onPurchaseSuccess) onPurchaseSuccess(); }
+      else throw new Error(vd2.message||'Test card verification failed');
+    } catch(e){ setCardError(e.message); } finally { setIsProcessing(false); }
   };
 
   return (
@@ -144,8 +183,26 @@ export default function PurchaseCheckoutModal({ vehicle, onClose, currentUser, o
                 <div><label className="block text-xs font-bold text-slate-700 mb-1">Phone *</label><input required type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="9876543210" className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" /></div>
 
                 <button type="submit" disabled={isProcessing || isOwn || isSold} className="w-full py-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-amber-500/30 flex items-center justify-center gap-2">
-                  {isProcessing ? 'Processing…' : <><CreditCard className="w-4 h-4" /> Pay & Buy Now — ₹{totalPayable.toLocaleString('en-IN')} <Sparkles className="w-3.5 h-3.5" /></>}
+                  {isProcessing ? 'Processing…' : <><CreditCard className="w-4 h-4" /> Pay with Razorpay — ₹{totalPayable.toLocaleString('en-IN')} <Sparkles className="w-3.5 h-3.5" /></>}
                 </button>
+                <div className="flex items-center gap-3 py-1"><div className="flex-1 h-px bg-slate-200"/><span className="text-[11px] font-black text-slate-400 uppercase">or</span><div className="flex-1 h-px bg-slate-200"/></div>
+                <div className="rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50/50 p-4 space-y-3">
+                  <div className="flex items-center justify-between"><h4 className="text-xs font-black text-slate-800 flex items-center gap-1.5"><CreditCard className="w-4 h-4 text-amber-600"/> Test Card (No real charge)</h4><button type="button" onClick={()=>setShowTestCard(!showTestCard)} className="text-[11px] font-extrabold text-amber-700 underline">{showTestCard?'Hide':'Show'} form</button></div>
+                  <p className="text-[11px] text-slate-600">Razorpay blocked? Use test card below — same fake verify.</p>
+                  {showTestCard && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={cardNumber} onChange={e=>setCardNumber(e.target.value)} placeholder="4111111111111111" className="col-span-2 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono" />
+                        <input value={cardExpiry} onChange={e=>setCardExpiry(e.target.value)} placeholder="MM/YY" className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs" />
+                        <input value={cardCvv} onChange={e=>setCardCvv(e.target.value)} placeholder="CVV" className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs" />
+                        <input value={cardName} onChange={e=>setCardName(e.target.value)} placeholder="Name on card" className="col-span-2 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs" />
+                      </div>
+                      {cardError && <p className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{cardError}</p>}
+                      <button type="button" onClick={handleTestCardBuy} disabled={isProcessing} className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-black text-xs rounded-xl">Pay ₹{totalPayable.toLocaleString('en-IN')} with Test Card → Buy</button>
+                    </div>
+                  )}
+                  {!showTestCard && <button type="button" onClick={()=>setShowTestCard(true)} className="w-full py-2.5 bg-white border-2 border-amber-300 text-amber-700 font-extrabold text-xs rounded-xl">Use Test Card Instead</button>}
+                </div>
                 <p className="text-[11px] text-slate-400 text-center">Secure Razorpay checkout. Ownership transfers on paid verification.</p>
               </form>
             </div>
