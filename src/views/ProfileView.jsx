@@ -14,6 +14,8 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
   const [openFaq, setOpenFaq] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [purchasesLoading, setPurchasesLoading] = useState(true);
+  const [bookings, setBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
 
   const isVendorRole = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
@@ -69,11 +71,26 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
     } catch (e) { console.error('Fetch purchases error', e); }
     finally { setPurchasesLoading(false); }
   };
+  const fetchBookings = async () => {
+    const targetId = currentUser?.id || currentUser?.uuid || currentUser?.email;
+    if (!targetId) { setBookingsLoading(false); return; }
+    try {
+      const res = await fetch('/api/bookings', {
+        headers: { 'x-user-id': String(currentUser?.id || currentUser?.uuid || ''), 'Cache-Control': 'no-store' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBookings(Array.isArray(data) ? data : []);
+      }
+    } catch (e) { console.error('Fetch bookings error', e); }
+    finally { setBookingsLoading(false); }
+  };
 
   useEffect(() => {
     if (currentUser?.id || currentUser?.uuid || currentUser?.email) {
       fetchPrivateBookmarks();
       fetchPurchases();
+      fetchBookings();
     }
   }, [currentUser]);
 
@@ -208,6 +225,38 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
 
         {/* Right Column: Private Bookmarks + My Purchases */}
         <div className="space-y-6 lg:col-span-2">
+          {/* My Rentals & Purchases — visible proof of rent/buy */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-md space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <span className="w-8 h-8 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">🛵</span>
+                My Rentals ({bookings.length})
+              </h3>
+              <span className="text-[11px] font-bold text-slate-400">{bookingsLoading ? 'Loading…' : `${bookings.length} bookings`}</span>
+            </div>
+            {bookingsLoading ? (
+              <div className="p-6 text-center text-xs font-bold text-slate-400">Loading rentals…</div>
+            ) : bookings.length === 0 ? (
+              <div className="p-8 bg-slate-50 rounded-2xl border border-slate-200 text-center space-y-2">
+                <p className="font-bold text-slate-700 text-sm">No rentals yet</p>
+                <p className="text-xs text-slate-500">Rent a vehicle → pays via Razorpay (temp mock works) → appears here. Vendor sees it too.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {bookings.map(b => (
+                  <div key={b.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-black text-slate-900">{b.vehicle_title || b.rental_title || 'Vehicle'} <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-black ${b.booking_status==='CONFIRMED' || b.payment_status==='PAID' ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}`}>{b.booking_status || b.payment_status || 'PENDING'}</span></p>
+                      <p className="text-xs text-slate-600">₹{Number(b.total_amount||b.rental_amount||0).toLocaleString('en-IN')} • {b.days||b.number_of_days||1} day(s) {b.start_date ? `from ${b.start_date}` : ''} {b.end_date ? `to ${b.end_date}` : ''}</p>
+                      <p className="text-[11px] text-slate-500">{b.created_at ? new Date(b.created_at).toLocaleString('en-IN') : ''} • {b.razorpay_order_id || 'mock order'}</p>
+                      <p className="text-[11px] text-slate-500">{String(b.user_id)===String(currentUser?.id||currentUser?.uuid) ? `Vendor: ${b.vendor_user_id}` : `Renter: ${b.user_name} • ${b.user_email}`}</p>
+                    </div>
+                    <span className="text-[11px] font-black text-slate-500"># {b.id}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           {/* My Purchases — visible proof of Buy flow */}
           <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-md space-y-4">
             <div className="flex items-center justify-between">
