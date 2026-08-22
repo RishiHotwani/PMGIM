@@ -77,7 +77,7 @@ export default function HomeView({ currentUser, setActiveTab, onLogAction, place
   ];
 
   const handleCardClick = (card) => {
-    onLogAction('QUICK_CARD_CLICK', `Clicked homepage quick action card: ${card.title}`);
+    onLogAction?.('QUICK_CARD_CLICK', `Clicked homepage quick action card: ${card.title}`);
     setActiveTab(card.tab);
   };
 

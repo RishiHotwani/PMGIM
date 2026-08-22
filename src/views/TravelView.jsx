@@ -82,7 +82,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         setCreatedTrips((prev) =>
           prev.map((t) => (t.id === tripId ? { ...t, seats_left: Math.max(0, (t.seats_left || 1) - 1), is_joined: true } : t))
         );
-        onLogAction('JOIN_TRIP', `Joined ride share trip ID #${tripId}`);
+        onLogAction?.('JOIN_TRIP', `Joined ride share trip ID #${tripId}`);
         if (onRefreshTrips) onRefreshTrips();
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -107,7 +107,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
         setCreatedTrips((prev) =>
           prev.map((t) => (t.id === tripId ? { ...t, seats_left: (t.seats_left || 0) + 1, is_joined: false } : t))
         );
-        onLogAction('LEAVE_TRIP', `Left ride share trip ID #${tripId}`);
+        onLogAction?.('LEAVE_TRIP', `Left ride share trip ID #${tripId}`);
         if (onRefreshTrips) onRefreshTrips();
       }
     } catch (err) {
@@ -251,7 +251,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
                 key={filter}
                 onClick={() => {
                   setSelectedFilter(filter);
-                  onLogAction('FILTER_TRAVEL', `Filtered travel board by: ${filter}`);
+                  onLogAction?.('FILTER_TRAVEL', `Filtered travel board by: ${filter}`);
                 }}
                 className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap border transition-all ${
                   selectedFilter === filter
@@ -267,7 +267,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
           <button
             onClick={() => {
               setIsModalOpen(true);
-              onLogAction('OPEN_CREATE_TRIP', 'Opened modal to post a new travel ride');
+              onLogAction?.('OPEN_CREATE_TRIP', 'Opened modal to post a new travel ride');
             }}
             className="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-bold text-xs rounded-2xl shadow-md shadow-blue-600/30 hover:bg-blue-700 transition-all shrink-0"
           >
@@ -397,7 +397,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
                 <button
                   onClick={() => {
                     setContactModalTrip(trip);
-                    onLogAction('OPEN_CONTACT', `Viewed contact for ${trip.user_name}`);
+                    onLogAction?.('OPEN_CONTACT', `Viewed contact for ${trip.user_name}`);
                   }}
                   className="py-3 px-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-xs hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
                 >
@@ -435,7 +435,7 @@ export default function TravelView({ trips = [], onLogAction, currentUser, onRef
       <button
         onClick={() => {
           setIsModalOpen(true);
-          onLogAction('OPEN_CREATE_TRIP', 'Opened modal to post a new travel ride');
+          onLogAction?.('OPEN_CREATE_TRIP', 'Opened modal to post a new travel ride');
         }}
         className="sm:hidden fixed bottom-20 right-6 z-30 w-14 h-14 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-xl shadow-blue-600/40"
         title="Post a Ride Share"
