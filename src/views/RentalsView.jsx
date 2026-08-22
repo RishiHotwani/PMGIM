@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Bike, Shield, Clock, Star, MapPin, Search, Info, Fuel, Gauge, Car, X, Phone } from 'lucide-react';
+import { Bike, Shield, Clock, Star, MapPin, Search, Info, Fuel, Gauge, Car, X, Phone, ShoppingBag } from 'lucide-react';
 import BookingCheckoutModal from '../components/BookingCheckoutModal';
+import PurchaseCheckoutModal from '../components/PurchaseCheckoutModal';
 
-export default function RentalsView({ rentals = [], loading = false, onLogAction, currentUser, onRefresh }) {
+export default function RentalsView({ rentals = [], loading = false, onLogAction, currentUser, onRefresh, onPurchaseSuccess }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [checkoutVehicle, setCheckoutVehicle] = useState(null);
+  const [purchaseVehicle, setPurchaseVehicle] = useState(null);
 
   const categories = ['All', 'Bikes', 'Scooters', 'Cars'];
 
@@ -32,9 +34,18 @@ export default function RentalsView({ rentals = [], loading = false, onLogAction
   };
 
   const handleProceedToCheckout = (vehicle) => {
+    if (vehicle.status === 'SOLD') { alert('This vehicle has been sold.'); return; }
     setSelectedVehicle(null);
     setCheckoutVehicle(vehicle);
     if (onLogAction) onLogAction('START_RENTAL_CHECKOUT', `Initiated checkout for vehicle: ${vehicle.title}`);
+  };
+  const handleProceedToBuy = (vehicle) => {
+    if (vehicle.status === 'SOLD') { alert('Already sold'); return; }
+    if (String(vehicle.vendor_user_id) === String(currentUser?.id || currentUser?.uuid || '')) { alert('You own this listing — cannot buy your own vehicle.'); return; }
+    if (!vehicle.sale_price) { alert('Not for sale — ask vendor to set a sale price.'); return; }
+    setSelectedVehicle(null);
+    setPurchaseVehicle(vehicle);
+    if (onLogAction) onLogAction('START_PURCHASE_CHECKOUT', `Initiated buy checkout for: ${vehicle.title}`);
   };
 
   const normalizeWa = (phone) => {
@@ -137,31 +148,31 @@ export default function RentalsView({ rentals = [], loading = false, onLogAction
           >
             <div>
               <div className="relative h-48 w-full bg-slate-100 overflow-hidden">
-                <img
-                  src={item.image}
-                  alt={item.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <span className="absolute top-3 left-3 px-3 py-1 bg-blue-600 text-white text-[10px] font-extrabold rounded-full shadow-md">
-                  {item.category || 'Rental'}
+                <img src={item.image} alt={item.title} className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${item.status==='SOLD' ? 'grayscale opacity-60' : ''}`} />
+                <span className={`absolute top-3 left-3 px-3 py-1 text-white text-[10px] font-extrabold rounded-full shadow-md ${item.status==='SOLD' ? 'bg-slate-900' : 'bg-blue-600'}`}>
+                  {item.status==='SOLD' ? 'SOLD' : (item.category || 'Rental')}
                 </span>
                 <div className="absolute top-3 right-3 px-2.5 py-1 bg-white/90 backdrop-blur-md rounded-full text-slate-900 text-xs font-bold flex items-center gap-1 shadow-md">
                   <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                   <span>{item.rating || 5.0}</span>
                 </div>
+                {item.status==='SOLD' && <div className="absolute inset-0 bg-slate-900/10 flex items-center justify-center"><span className="px-4 py-2 bg-slate-900 text-white text-xs font-black rounded-full">SOLD OUT</span></div>}
               </div>
 
               <div className="p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h3 className="font-extrabold text-slate-900 text-base group-hover:text-blue-600 transition-colors">
+                    <h3 className="font-extrabold text-slate-900 text-base group-hover:text-blue-600 transition-colors flex items-center gap-2">
                       {item.title}
+                      {item.status==='SOLD' && <span className="px-2 py-0.5 bg-slate-900 text-white rounded-full text-[9px] font-black">SOLD</span>}
                     </h3>
                     <p className="text-xs text-slate-500 font-medium">{item.vendor}</p>
                   </div>
                   <div className="text-right">
                     <span className="text-lg font-black text-blue-600">₹{item.price_per_day}</span>
                     <span className="text-[10px] text-slate-400 block font-bold">/day</span>
+                    {item.sale_price && item.status!=='SOLD' && <span className="text-[11px] font-extrabold text-amber-600 block">Buy ₹{Number(item.sale_price).toLocaleString('en-IN')}</span>}
+                    {item.status==='SOLD' && <span className="text-[11px] font-extrabold text-slate-500 block line-through">Buy ₹{item.sale_price ? Number(item.sale_price).toLocaleString('en-IN') : '—'}</span>}
                   </div>
                 </div>
 
@@ -195,21 +206,20 @@ export default function RentalsView({ rentals = [], loading = false, onLogAction
               </div>
             </div>
 
-            <div className="p-5 pt-0 flex items-center gap-2">
-              <button
-                onClick={() => handleOpenDetail(item)}
-                className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5"
-              >
-                <Info className="w-3.5 h-3.5" />
-                <span>Specs</span>
-              </button>
-
-              <button
-                onClick={() => handleProceedToCheckout(item)}
-                className="w-1/2 py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-600/30 transition-colors flex items-center justify-center gap-1.5"
-              >
-                <span>Book Now</span>
-              </button>
+            <div className="p-5 pt-0 space-y-2">
+              <div className="flex items-center gap-2">
+                <button onClick={() => handleOpenDetail(item)} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5"><Info className="w-3.5 h-3.5" /><span>Specs</span></button>
+                {item.status==='SOLD' ? (
+                  <span className="flex-1 py-2.5 bg-slate-900 text-white font-black text-xs rounded-xl text-center">Sold</span>
+                ) : (
+                  <button onClick={() => handleProceedToCheckout(item)} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-600/30 flex items-center justify-center gap-1.5"><span>Rent</span></button>
+                )}
+              </div>
+              {item.status!=='SOLD' && item.is_for_sale && item.sale_price ? (
+                <button onClick={() => handleProceedToBuy(item)} className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-md shadow-amber-500/30 flex items-center justify-center gap-1.5"><ShoppingBag className="w-3.5 h-3.5" /><span>Buy Now — ₹{Number(item.sale_price).toLocaleString('en-IN')}</span></button>
+              ) : item.status!=='SOLD' ? (
+                <div className="text-[11px] text-slate-400 text-center font-medium">Rental only</div>
+              ) : null}
             </div>
           </div>
         ))}
@@ -280,12 +290,23 @@ export default function RentalsView({ rentals = [], loading = false, onLogAction
                 );
               })()}
 
-              <button
-                onClick={() => handleProceedToCheckout(selectedVehicle)}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2"
-              >
-                <span>Confirm & Reserve {selectedVehicle.title}</span>
-              </button>
+              {selectedVehicle.sale_price && selectedVehicle.status!=='SOLD' && selectedVehicle.is_for_sale ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-slate-700">Buy outright</span>
+                  <span className="text-sm font-black text-amber-600">₹{Number(selectedVehicle.sale_price).toLocaleString('en-IN')}</span>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-2">
+                {selectedVehicle.status==='SOLD' ? (
+                  <span className="w-full py-4 bg-slate-900 text-white font-black text-xs rounded-2xl text-center">Sold Out</span>
+                ) : (
+                  <button onClick={() => handleProceedToCheckout(selectedVehicle)} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2"><span>Rent — ₹{selectedVehicle.price_per_day}/day</span></button>
+                )}
+                {selectedVehicle.status!=='SOLD' && selectedVehicle.is_for_sale && selectedVehicle.sale_price && (
+                  <button onClick={() => handleProceedToBuy(selectedVehicle)} className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-amber-500/30 flex items-center justify-center gap-2"><ShoppingBag className="w-4 h-4" /><span>Buy Now — ₹{Number(selectedVehicle.sale_price).toLocaleString('en-IN')}</span></button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -298,6 +319,16 @@ export default function RentalsView({ rentals = [], loading = false, onLogAction
           onClose={() => setCheckoutVehicle(null)}
           currentUser={currentUser}
           onLogAction={onLogAction}
+        />
+      )}
+      {/* Razorpay Purchase (Buy) Modal */}
+      {purchaseVehicle && (
+        <PurchaseCheckoutModal
+          vehicle={purchaseVehicle}
+          onClose={() => setPurchaseVehicle(null)}
+          currentUser={currentUser}
+          onLogAction={onLogAction}
+          onPurchaseSuccess={() => { setPurchaseVehicle(null); if(onRefresh) onRefresh(); if(onPurchaseSuccess) onPurchaseSuccess(); }}
         />
       )}
     </div>

@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import HomeView from './views/HomeView';
-import RentalsView from './views/RentalsView';
-import ExploreView from './views/ExploreView';
-import TripPlannerView from './views/TripPlannerView';
-import TravelView from './views/TravelView';
-import ProfileView from './views/ProfileView';
+const RentalsView = lazy(() => import('./views/RentalsView'));
+const ExploreView = lazy(() => import('./views/ExploreView'));
+const TripPlannerView = lazy(() => import('./views/TripPlannerView'));
+const TravelView = lazy(() => import('./views/TravelView'));
+const ProfileView = lazy(() => import('./views/ProfileView'));
+const VendorPortalView = lazy(() => import('./views/VendorPortalView'));
 import AuthGateView from './views/AuthGateView';
-import VendorPortalView from './views/VendorPortalView';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import * as rentalService from './services/rentalService';
 import { DEFAULT_EXPLORE_PLACES } from './data/defaultPlaces';
@@ -223,69 +223,72 @@ function MainAppContent() {
 
         {/* Main Views */}
         <main className="flex-1 w-full">
-          {activeTab === 'home' && (
-            <HomeView
-              currentUser={currentUser}
-              setActiveTab={handleTabChange}
-              places={explorePlaces}
-              rentals={rentals}
-              trips={travelTrips}
-            />
-          )}
+          <Suspense fallback={<div className="w-full py-20 flex flex-col items-center justify-center gap-3"><div className="w-8 h-8 rounded-full border-4 border-blue-500 border-t-transparent animate-spin" /><p className="text-xs font-bold text-slate-400">Loading…</p></div>}>
+            {activeTab === 'home' && (
+              <HomeView
+                currentUser={currentUser}
+                setActiveTab={handleTabChange}
+                places={explorePlaces}
+                rentals={rentals}
+                trips={travelTrips}
+              />
+            )}
 
-          {activeTab === 'rentals' && (
-            <RentalsView
-              rentals={rentals}
-              loading={rentalsLoading}
-              error={rentalsError}
-              currentUser={currentUser}
-              onRefresh={refreshRentals}
-              onRefreshRentals={refreshRentals}
-            />
-          )}
+            {activeTab === 'rentals' && (
+              <RentalsView
+                rentals={rentals}
+                loading={rentalsLoading}
+                error={rentalsError}
+                currentUser={currentUser}
+                onRefresh={refreshRentals}
+                onRefreshRentals={refreshRentals}
+                onPurchaseSuccess={refreshRentals}
+              />
+            )}
 
-          {activeTab === 'vendor_portal' && (
-            <VendorPortalView
-              currentUser={currentUser}
-              onRefreshRentals={refreshRentals}
-              onAddRental={handleAddRental}
-            />
-          )}
+            {activeTab === 'vendor_portal' && (
+              <VendorPortalView
+                currentUser={currentUser}
+                onRefreshRentals={refreshRentals}
+                onAddRental={handleAddRental}
+              />
+            )}
 
-          {activeTab === 'explore' && (
-            <ExploreView
-              places={explorePlaces}
-              currentUser={currentUser}
-              onToggleBookmark={handleToggleBookmark}
-              initialSearchQuery={exploreSearchQuery}
-              onAddPlace={handleAddPlace}
-            />
-          )}
+            {activeTab === 'explore' && (
+              <ExploreView
+                places={explorePlaces}
+                currentUser={currentUser}
+                onToggleBookmark={handleToggleBookmark}
+                initialSearchQuery={exploreSearchQuery}
+                onAddPlace={handleAddPlace}
+              />
+            )}
 
-          {activeTab === 'planner' && (
-            <TripPlannerView
-              places={explorePlaces}
-              currentUser={currentUser}
-              onToggleBookmark={handleToggleBookmark}
-            />
-          )}
+            {activeTab === 'planner' && (
+              <TripPlannerView
+                places={explorePlaces}
+                currentUser={currentUser}
+                onToggleBookmark={handleToggleBookmark}
+              />
+            )}
 
-          {activeTab === 'travel' && (
-            <TravelView
-              trips={travelTrips}
-              currentUser={currentUser}
-              onRefreshTrips={fetchExploreAndTrips}
-              onAddTrip={handleAddTrip}
-            />
-          )}
+            {activeTab === 'travel' && (
+              <TravelView
+                trips={travelTrips}
+                currentUser={currentUser}
+                onRefreshTrips={fetchExploreAndTrips}
+                onAddTrip={handleAddTrip}
+              />
+            )}
 
-          {activeTab === 'profile' && (
-            <ProfileView
-              currentUser={currentUser}
-              onLogout={handleLogout}
-              places={explorePlaces}
-            />
-          )}
+            {activeTab === 'profile' && (
+              <ProfileView
+                currentUser={currentUser}
+                onLogout={handleLogout}
+                places={explorePlaces}
+              />
+            )}
+          </Suspense>
         </main>
 
         {/* Bottom Nav */}

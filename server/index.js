@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { fileURLToPath } from 'url';
 import { ENV } from './config/env.js';
-import { initDatabase, query, withTransaction, isInMemoryFallback, checkWritePersistence, memoryStore } from './config/database.js';
+import { initDatabase, query, withTransaction, isInMemoryFallback, checkWritePersistence, memoryStore, persistAllMemory } from './config/database.js';
 import { logAuditActivity } from './utils/logger.js';
 import authRouter from './modules/auth/auth.routes.js';
 import { globalRateLimiter } from './middleware/rateLimiter.js';
@@ -38,6 +38,9 @@ try {
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cookieParser(ENV.COOKIES.SECRET));
+// 512MB: keep per-request heap tiny
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: false, limit: '100kb' }));
 
 const allowedOrigins = ENV.CORS?.ALLOWED_ORIGINS ? ENV.CORS.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : null;
 app.use(cors({
@@ -52,7 +55,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-user-name', 'x-user-uuid', 'x-user-email']
 }));
 
-app.use(express.json());
 app.use(globalRateLimiter);
 app.use(express.static(path.join(__dirname, '../dist')));
 
@@ -191,7 +193,7 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Forbidden. Vendor role required to post vehicle listings.' });
     }
 
-    const { title, category, price_per_day, fuel, transmission, tags, image, description, location, vendor_phone } = req.body;
+    const { title, category, price_per_day, sale_price, is_for_sale, fuel, transmission, tags, image, description, location, vendor_phone } = req.body;
 
     if (!title || !price_per_day || !image) {
       return res.status(400).json({ success: false, message: 'Title, Price per day, and Image URL are required.' });
@@ -209,24 +211,31 @@ app.post('/api/rentals', authenticateToken, async (req, res, next) => {
       else if (d.length===12 && d.startsWith('91')) vendorPhoneVal = `+${d}`;
       else if (d) vendorPhoneVal = `+${d}`;
     }
+    const parsedSalePrice = sale_price !== undefined && sale_price !== '' && sale_price !== null ? Math.max(0, parseInt(sale_price, 10) || 0) || null : null;
+    const forSale = is_for_sale === undefined || is_for_sale === null ? true : Boolean(is_for_sale === true || is_for_sale === 'true' || is_for_sale === 1 || is_for_sale === '1');
+    if (forSale && parsedSalePrice !== null && parsedSalePrice < 1000) {
+      return res.status(400).json({ success: false, message: 'Sale price must be at least ₹1,000 if for sale.' });
+    }
 
     const result = await query(
       `INSERT INTO rentals 
-       (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, vendor_phone, is_available, status) 
-       VALUES (?, ?, ?, ?, ?, 5.0, 1, '0.5 km away', ?, ?, ?, ?, ?, ?, ?, TRUE, 'ACTIVE')`,
+       (vendor_user_id, title, vendor, category, price_per_day, sale_price, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, vendor_phone, is_available, is_for_sale, status) 
+       VALUES (?, ?, ?, ?, ?, ?, 5.0, 1, '0.5 km away', ?, ?, ?, ?, ?, ?, ?, TRUE, ?, 'ACTIVE')`,
       [
         vendorUserIdStr,
         title,
         vendorName,
         validCategory,
         parseInt(price_per_day, 10),
+        parsedSalePrice,
         fuel || 'Petrol',
         transmission || 'Automatic',
         tags || 'Verified Vendor',
         defaultImage,
         description || `${title} available for campus and Goa trip rentals.`,
         location || 'Sanquelim / GIM Gate',
-        vendorPhoneVal
+        vendorPhoneVal,
+        forSale
       ]
     );
 
@@ -568,6 +577,145 @@ app.get('/api/bookings', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// ----------------- PURCHASE (BUY) ROUTES -----------------
+app.post('/api/purchases/create-order', async (req, res, next) => {
+  try {
+    const { rental_id, user_name, user_email, user_phone } = req.body;
+    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null;
+    const vendorHeaderId = req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null;
+
+    if (!rental_id) return res.status(400).json({ success: false, message: 'Rental ID is required.' });
+    if (!user_name || !user_email || !user_phone) return res.status(400).json({ success: false, message: 'Name, Email and Phone are required for purchase.' });
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(String(user_email))) return res.status(400).json({ success: false, message: 'Valid email required.' });
+    const phoneDigits = String(user_phone).replace(/\D/g,'');
+    if (phoneDigits.length < 10) return res.status(400).json({ success: false, message: 'Valid 10-digit phone required.' });
+
+    const rentals = await query("SELECT * FROM rentals WHERE id = ? AND status != 'DELETED'", [rental_id]);
+    if (rentals.length === 0) return res.status(404).json({ success: false, message: 'Vehicle not found or unavailable.' });
+    const rental = rentals[0];
+
+    // Edge: already sold
+    if (rental.status === 'SOLD') return res.status(409).json({ success: false, message: 'Vehicle already sold. No longer available for purchase.' });
+    // Edge: not for sale
+    if (rental.is_for_sale === false || rental.is_for_sale === 0) return res.status(400).json({ success: false, message: 'This vehicle is rental-only and not for sale.' });
+    // Edge: vendor buying own vehicle
+    const buyerIdStr = String(userId || '');
+    const vendorIdStr = String(rental.vendor_user_id || '');
+    if (buyerIdStr && vendorIdStr && buyerIdStr === vendorIdStr) return res.status(403).json({ success: false, message: 'You cannot buy your own vehicle listing.' });
+    // Edge: sale price missing
+    const salePrice = parseFloat(rental.sale_price);
+    if (!salePrice || isNaN(salePrice) || salePrice < 1000) return res.status(400).json({ success: false, message: 'Sale price not set for this vehicle. Ask vendor to set a sale price.' });
+    // Edge: already has a PAID purchase (race protection)
+    const existingPaid = await query("SELECT id FROM vehicle_purchases WHERE rental_id = ? AND payment_status = 'PAID' LIMIT 1", [rental_id]);
+    if (existingPaid && existingPaid.length > 0) {
+      // Mark sold if stale SOLD flag missed
+      try { await query("UPDATE rentals SET status = 'SOLD', is_available = FALSE WHERE id = ?", [rental_id]); } catch(e){}
+      return res.status(409).json({ success: false, message: 'Vehicle was just sold to another buyer.' });
+    }
+
+    // Server-side pricing (single source of truth)
+    const serviceFee = 500;
+    const gstAmount = Math.round(salePrice * 0.05);
+    const totalAmount = salePrice + serviceFee + gstAmount;
+    const amountInPaise = Math.round(totalAmount * 100);
+
+    let razorpayOrder = null;
+    try {
+      razorpayOrder = await razorpayInstance.orders.create({
+        amount: amountInPaise,
+        currency: 'INR',
+        receipt: `purchase_${Date.now()}_${rental_id}`,
+        notes: { vehicle_title: rental.title, user_name, type: 'buy' }
+      });
+    } catch (rzpErr) {
+      console.error('[RAZORPAY_PURCHASE_ORDER_ERROR]', rzpErr.message);
+      if (ENV.RAZORPAY.KEY_ID && !ENV.RAZORPAY.KEY_ID.includes('dummy') && process.env.NODE_ENV === 'production') {
+        return res.status(400).json({ success: false, message: `Razorpay Gateway Error: ${rzpErr.message}` });
+      }
+      razorpayOrder = { id: `order_mock_${Date.now()}`, amount: amountInPaise, currency: 'INR' };
+    }
+
+    const purchaseResult = await query(
+      `INSERT INTO vehicle_purchases (rental_id, user_id, user_name, user_email, user_phone, vendor_user_id, vehicle_title, sale_price, gst_amount, service_fee, total_amount, razorpay_order_id, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+      [rental_id, userId, user_name, user_email, user_phone, rental.vendor_user_id, rental.title, salePrice, gstAmount, serviceFee, totalAmount, razorpayOrder.id]
+    );
+
+    res.json({
+      success: true,
+      order_id: razorpayOrder.id,
+      amount_in_paise: amountInPaise,
+      razorpay_key: ENV.RAZORPAY.KEY_ID,
+      purchase_id: purchaseResult.insertId,
+      pricing: { sale_price: salePrice, gst_amount: gstAmount, service_fee: serviceFee, total_amount: totalAmount }
+    });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/purchases/verify', authenticateToken, async (req, res, next) => {
+  try {
+    const { purchase_id, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const userId = String(req.user.id || req.user.uuid);
+
+    if (razorpay_order_id && razorpay_order_id.startsWith('order_mock_') && process.env.NODE_ENV === 'production' && ENV.RAZORPAY.KEY_ID && !ENV.RAZORPAY.KEY_ID.includes('dummy')) {
+      return res.status(400).json({ success: false, message: 'Mock payment not allowed in production.' });
+    }
+
+    // Re-check not already sold (race on verify)
+    const purchases = await query('SELECT * FROM vehicle_purchases WHERE razorpay_order_id = ? OR id = ?', [razorpay_order_id, purchase_id]);
+    const purchase = purchases[0];
+    if (!purchase) return res.status(404).json({ success: false, message: 'Purchase order not found.' });
+    if (purchase.payment_status === 'PAID') return res.json({ success: true, message: 'Already verified.' });
+
+    const dupSold = await query("SELECT id FROM vehicle_purchases WHERE rental_id = ? AND payment_status = 'PAID' LIMIT 1", [purchase.rental_id]);
+    if (dupSold && dupSold.length > 0) {
+      await query("UPDATE vehicle_purchases SET payment_status = 'FAILED' WHERE razorpay_order_id = ? OR id = ?", ['FAILED', null, razorpay_order_id, purchase_id]);
+      return res.status(409).json({ success: false, message: 'Vehicle was sold to another buyer while you were paying. Refund will be issued.' });
+    }
+
+    let isValid = true;
+    if (razorpay_signature && razorpay_order_id && !razorpay_order_id.startsWith('order_mock_')) {
+      const gen = crypto.createHmac('sha256', ENV.RAZORPAY.KEY_SECRET).update(`${razorpay_order_id}|${razorpay_payment_id}`).digest('hex');
+      isValid = gen === razorpay_signature;
+    }
+    if (!isValid) {
+      await query("UPDATE vehicle_purchases SET payment_status = 'FAILED', razorpay_payment_id = ?, razorpay_signature = ? WHERE razorpay_order_id = ? OR id = ?", [razorpay_payment_id || null, razorpay_signature || null, razorpay_order_id, purchase_id]);
+      return res.status(400).json({ success: false, message: 'Invalid Razorpay payment signature.' });
+    }
+
+    await query("UPDATE vehicle_purchases SET payment_status = 'PAID', razorpay_payment_id = ?, razorpay_signature = ? WHERE razorpay_order_id = ? OR id = ?", [razorpay_payment_id || 'mock_pay', razorpay_signature || 'mock_sig', razorpay_order_id, purchase_id]);
+    await query("UPDATE rentals SET status = 'SOLD', is_available = FALSE, is_for_sale = FALSE WHERE id = ?", [purchase.rental_id]);
+
+    const refreshed = await query('SELECT vehicle_title, total_amount FROM vehicle_purchases WHERE razorpay_order_id = ? OR id = ?', [razorpay_order_id, purchase_id]);
+    const b = refreshed[0] || purchase;
+
+    await query('INSERT INTO user_notifications (user_id, type, title, message) VALUES (?, "PURCHASE_SUCCESS", ?, ?)', [userId, `🎉 Purchase Confirmed: ${b.vehicle_title}`, `${b.user_name || 'You'} paid ₹${b.total_amount} — ownership transferred! Vendor will contact you.`]);
+    if (b.vendor_user_id) {
+      await query('INSERT INTO user_notifications (user_id, type, title, message) VALUES (?, "VEHICLE_SOLD", ?, ?)', [String(b.vendor_user_id), `💰 Vehicle Sold: ${b.vehicle_title}`, `Your ${b.vehicle_title} was bought for ₹${b.total_amount}. Contact buyer at ${b.user_phone || ''}.`]);
+    }
+
+    res.json({ success: true, message: 'Payment verified & purchase confirmed! Vehicle marked SOLD.' });
+  } catch (err) { next(err); }
+});
+
+app.get('/api/purchases', async (req, res, next) => {
+  try {
+    const userId = req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '';
+    const userUuid = req.headers['x-user-uuid'] ? String(req.headers['x-user-uuid']).trim() : '';
+    const userEmail = req.headers['x-user-email'] ? String(req.headers['x-user-email']).trim() : '';
+    const target = userId || userUuid || userEmail;
+    if (!target) return res.json([]);
+    // Return purchases where user is buyer OR vendor, deduped
+    const rows = await query('SELECT * FROM vehicle_purchases WHERE user_id = ? OR vendor_user_id = ? ORDER BY id DESC', [target, target]);
+    // Fallback: also check uuid/email variants if primary empty
+    if (rows.length === 0 && (userUuid || userEmail)) {
+      const alt = await query('SELECT * FROM vehicle_purchases WHERE user_id = ? OR vendor_user_id = ? ORDER BY id DESC', [userUuid || target, userUuid || target]);
+      return res.json(alt);
+    }
+    res.json(rows);
+  } catch (err) { next(err); }
 });
 
 // ----------------- NOTIFICATIONS ROUTES -----------------
@@ -1023,11 +1171,14 @@ app.post('/api/trips/:id/join', async (req, res, next) => {
       }
       t.seats_left = Math.max(0, t.seats_left - 1);
       if (t.seats_left === 0) t.status = 'FULL';
+      try { persistAllMemory(); } catch {}
       if (existingIndex >= 0) {
         memoryStore.trip_participants[existingIndex].status = 'JOINED';
       } else {
         memoryStore.trip_participants.push({ id: memoryStore.trip_participants.length + 1, trip_id: Number(id), user_id: String(uidStr), user_name: name, status: 'JOINED' });
       }
+      try { persistAllMemory(); } catch {}
+
       if (t.host_user_id && String(t.host_user_id) !== String(uidStr)) {
         memoryStore.user_notifications.push({
           id: memoryStore.user_notifications.length + 1,
@@ -1136,9 +1287,11 @@ app.delete('/api/trips/:id/leave', async (req, res, next) => {
     if (isInMemoryFallback) {
       const part = memoryStore.trip_participants.find(p => Number(p.trip_id) === Number(id) && String(p.user_id) === String(uidStr));
       if (part) part.status = 'LEFT';
+      try { persistAllMemory(); } catch {}
       const t = memoryStore.travel_trips.find(x => Number(x.id) === Number(id));
       if (t) {
         t.seats_left = Math.min(t.seats_total, t.seats_left + 1);
+        try { persistAllMemory(); } catch {}
         if (t.status === 'FULL') t.status = 'ACTIVE';
       }
       return res.json({ success: true, message: 'Left ride successfully!', trip_id: Number(id), is_joined: false, seats_left: t?.seats_left, status: t?.status });
@@ -1311,6 +1464,23 @@ app.get('/api/admin/analytics', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'BeyondGoa Campus Mobility Express Server Active',
+    environment: ENV.NODE_ENV,
+    persistence: isInMemoryFallback ? 'file-backed-memory' : 'mysql',
+    mode: isInMemoryFallback ? 'zero-db-awesome' : 'mysql',
+    counts: {
+      rentals: memoryStore.rentals?.length || 0,
+      places: memoryStore.explore_places?.length || 0,
+      trips: memoryStore.travel_trips?.length || 0,
+      purchases: memoryStore.vehicle_purchases?.length || 0,
+    },
+    uptime: process.uptime()
+  });
 });
 
 app.get('/api', (req, res) => {

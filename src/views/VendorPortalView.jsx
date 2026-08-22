@@ -20,6 +20,8 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
     title: '',
     category: 'Bike',
     price_per_day: '',
+    sale_price: '',
+    is_for_sale: true,
     fuel: 'Petrol',
     transmission: 'Manual',
     tags: 'Verified Vendor',
@@ -34,6 +36,8 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
       title: '',
       category: 'Bike',
       price_per_day: '',
+      sale_price: '',
+      is_for_sale: true,
       fuel: 'Petrol',
       transmission: 'Manual',
       tags: 'Verified Vendor',
@@ -278,7 +282,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
 
                   <h3 className="font-extrabold text-sm text-slate-900">{item.title}</h3>
 
-                  <div className="text-xs font-extrabold text-slate-700">₹{item.price_per_day} / day</div>
+                  <div className="text-xs font-extrabold text-slate-700">₹{item.price_per_day} / day {item.sale_price ? <span className="text-amber-600">• Buy ₹{Number(item.sale_price).toLocaleString('en-IN')}</span> : null} {item.status==='SOLD' ? <span className="ml-1 px-2 py-0.5 bg-slate-900 text-white rounded-full text-[10px]">SOLD</span> : null}</div>
 
                   <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-1">
                     <span>{item.fuel}</span>
@@ -400,16 +404,31 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Daily Price (₹)</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Daily Price (₹/day)</label>
                     <input
                       type="number"
                       required
+                      min="1"
                       placeholder="450"
                       value={formData.price_per_day}
                       onChange={(e) => setFormData({ ...formData, price_per_day: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={formData.is_for_sale} onChange={(e)=>setFormData({...formData, is_for_sale:e.target.checked})} className="w-4 h-4 accent-blue-600" />
+                    <span className="text-xs font-extrabold text-slate-800">Also list for sale (Buy option)</span>
+                  </label>
+                  {formData.is_for_sale && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Sale Price (₹) — buy outright</label>
+                      <input type="number" min="1000" placeholder="e.g. 95000 for Activa, 1150000 for City" value={formData.sale_price} onChange={(e)=>setFormData({...formData, sale_price:e.target.value})} className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <p className="text-[11px] text-slate-500 mt-1">Buyers pay sale price + 5% GST + ₹500 service fee. Leave empty if rental-only.</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

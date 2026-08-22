@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"vite\"",
-    "server": "node server/index.js",
-    "start": "concurrently \"npm run server\" \"vite\"",
+    "server": "NODE_OPTIONS=--max-old-space-size=384 --optimize-for-size node server/index.js",
+    "start": "npm run build && NODE_OPTIONS=--max-old-space-size=384 --optimize-for-size node server/index.js",
+    "start:dev": "concurrently \"npm run server\" \"vite\"",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview --host"
   },
   "dependencies": {
     "@types/react": "^18.3.3",

@@ -20,4 +20,21 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // 512MB instance: keep build RAM low and split huge vendor chunks
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          mixpanel: ['mixpanel-browser'],
+          pdf: ['jspdf', 'html2canvas'],
+          icons: ['lucide-react'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 650,
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'lucide-react'],
+  },
 });

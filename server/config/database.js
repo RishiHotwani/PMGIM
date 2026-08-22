@@ -1,10 +1,60 @@
 import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ENV } from './env.js';
+
+const __filenameFs = fileURLToPath(import.meta.url);
+const __dirnameFs = path.dirname(__filenameFs);
+const DATA_DIR = path.join(__dirnameFs, '../data');
+const DATA_FILES = {
+  rentals: path.join(DATA_DIR, 'rentals.json'),
+  explore_places: path.join(DATA_DIR, 'explore_places.json'),
+  travel_trips: path.join(DATA_DIR, 'travel_trips.json'),
+  vehicle_purchases: path.join(DATA_DIR, 'vehicle_purchases.json'),
+  rental_bookings: path.join(DATA_DIR, 'rental_bookings.json'),
+  users: path.join(DATA_DIR, 'users.json'),
+  trip_participants: path.join(DATA_DIR, 'trip_participants.json'),
+  user_bookmarks: path.join(DATA_DIR, 'user_bookmarks.json'),
+};
 
 let pool = null;
 export let isInMemoryFallback = false;
+
+function ensureDataDir() {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
+}
+function persistMemory(key) {
+  if (!DATA_FILES[key]) return;
+  ensureDataDir();
+  try {
+    const tmp = DATA_FILES[key] + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(memoryStore[key] || [], null, 2), 'utf-8');
+    fs.renameSync(tmp, DATA_FILES[key]);
+  } catch (e) { console.warn(`[persistMemory] ${key} write failed:`, e.message); }
+}
+export function persistAllMemory() {
+  Object.keys(DATA_FILES).forEach(k => persistMemory(k));
+}
+function loadMemoryFromFiles() {
+  ensureDataDir();
+  let loadedAny = false;
+  for (const [key, file] of Object.entries(DATA_FILES)) {
+    try {
+      if (fs.existsSync(file)) {
+        const raw = fs.readFileSync(file, 'utf-8');
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          memoryStore[key] = arr;
+          loadedAny = true;
+        }
+      }
+    } catch (e) { console.warn(`[loadMemory] ${key} read failed:`, e.message); }
+  }
+  return loadedAny;
+}
 
 export function checkWritePersistence(res) {
   const disableMemory = process.env.DISABLE_MEMORY_FALLBACK === 'true';
@@ -35,14 +85,21 @@ export const memoryStore = {
   user_activities: [],
   user_notifications: [],
   user_bookmarks: [],
-  rental_bookings: []
+  rental_bookings: [],
+  vehicle_purchases: []
 };
 
 export async function initDatabase() {
   if (process.env.VERCEL) {
-    console.log('⚡ [Vercel Environment] Enabling instant in-memory database fallback.');
+    console.log('⚡ [Vercel Environment] Enabling file-backed in-memory fallback.');
     isInMemoryFallback = true;
-    seedMemoryData();
+    const loaded = loadMemoryFromFiles();
+    if (!loaded) seedMemoryData();
+    else {
+      // Ensure defaults are present even when loaded from files (append missing seeds)
+      seedMemoryData({ mergeOnly: true });
+      console.log('✅ Loaded persisted data from server/data/*.json');
+    }
     return;
   }
 
@@ -81,9 +138,11 @@ export async function initDatabase() {
     }
 
     if (!rootConn) {
-      console.warn(`Failed to connect to MySQL server at ${ENV.DB.HOST}:${ENV.DB.PORT}. Switching to in-memory fallback.`);
+      console.warn(`Failed to connect to MySQL server at ${ENV.DB.HOST}:${ENV.DB.PORT}. Switching to file-backed in-memory fallback.`);
       isInMemoryFallback = true;
-      seedMemoryData();
+      const loaded = loadMemoryFromFiles();
+      if (!loaded) seedMemoryData();
+      else { seedMemoryData({ mergeOnly: true }); console.log('✅ Loaded persisted data from server/data/*.json'); }
       return;
     }
 
@@ -97,8 +156,11 @@ export async function initDatabase() {
       password: ENV.DB.PASSWORD,
       database: ENV.DB.NAME,
       waitForConnections: true,
-      connectionLimit: 25,
-      queueLimit: 0
+      connectionLimit: 3,
+      queueLimit: 10,
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 10000,
+      idleTimeout: 60000
     });
 
     // 1. Users Table
@@ -183,6 +245,8 @@ export async function initDatabase() {
         vendor VARCHAR(255) NOT NULL,
         category ENUM('Bike', 'Scooter', 'Car') NOT NULL DEFAULT 'Bike',
         price_per_day INT NOT NULL,
+        sale_price DECIMAL(10,2) NULL,
+        is_for_sale BOOLEAN DEFAULT TRUE,
         rating DECIMAL(3,1) DEFAULT 4.8,
         total_ratings INT DEFAULT 15,
         distance VARCHAR(50) DEFAULT '1.0 km away',
@@ -194,7 +258,7 @@ export async function initDatabase() {
         location VARCHAR(255) DEFAULT 'Sanquelim / Campus',
         vendor_phone VARCHAR(20) NULL,
         is_available BOOLEAN DEFAULT TRUE,
-        status ENUM('ACTIVE', 'MAINTENANCE', 'DELETED') NOT NULL DEFAULT 'ACTIVE',
+        status ENUM('ACTIVE', 'MAINTENANCE', 'SOLD', 'DELETED') NOT NULL DEFAULT 'ACTIVE',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         deleted_at TIMESTAMP NULL DEFAULT NULL,
@@ -207,8 +271,10 @@ export async function initDatabase() {
 
     const rentalAlterations = [
       "MODIFY COLUMN vendor_user_id VARCHAR(255) NULL",
-      "ADD COLUMN status ENUM('ACTIVE', 'MAINTENANCE', 'DELETED') NOT NULL DEFAULT 'ACTIVE'",
+      "ADD COLUMN status ENUM('ACTIVE', 'MAINTENANCE', 'SOLD', 'DELETED') NOT NULL DEFAULT 'ACTIVE'",
       "ADD COLUMN vendor_phone VARCHAR(20) NULL",
+      "ADD COLUMN sale_price DECIMAL(10,2) NULL",
+      "ADD COLUMN is_for_sale BOOLEAN DEFAULT TRUE",
       "ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
       "ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"
     ];
@@ -264,6 +330,34 @@ export async function initDatabase() {
     for (const colDef of bookingAlterations) {
       try { await pool.query(`ALTER TABLE rental_bookings ${colDef};`); } catch (e) {}
     }
+
+    // 5b. Vehicle Purchases Table (Buy flow)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vehicle_purchases (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        rental_id INT NOT NULL,
+        user_id VARCHAR(255) NULL,
+        user_name VARCHAR(255) NOT NULL,
+        user_email VARCHAR(255) NOT NULL,
+        user_phone VARCHAR(50) NOT NULL,
+        vendor_user_id VARCHAR(255) NULL,
+        vehicle_title VARCHAR(255) NOT NULL,
+        sale_price DECIMAL(10,2) NOT NULL,
+        gst_amount DECIMAL(10,2) DEFAULT 0.00,
+        service_fee DECIMAL(10,2) DEFAULT 0.00,
+        total_amount DECIMAL(10,2) NOT NULL,
+        payment_status ENUM('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'REFUNDED') DEFAULT 'PENDING',
+        razorpay_order_id VARCHAR(255) NULL,
+        razorpay_payment_id VARCHAR(255) NULL,
+        razorpay_signature VARCHAR(255) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_rental_id (rental_id),
+        INDEX idx_vendor_user (vendor_user_id),
+        INDEX idx_payment_status (payment_status)
+      ) ENGINE=InnoDB;
+    `);
 
     // 6. Explore Places Table
     await pool.query(`
@@ -488,28 +582,35 @@ export async function initDatabase() {
 
   } catch (err) {
     console.warn('⚠️ Could not connect to MySQL server:', err.message);
-    console.warn('🔄 Initializing in-memory database fallback.');
+    console.warn('🔄 Initializing file-backed in-memory fallback.');
     isInMemoryFallback = true;
-    seedMemoryData();
+    const loaded = loadMemoryFromFiles();
+    if (!loaded) seedMemoryData();
+    else { seedMemoryData({ mergeOnly: true }); console.log('✅ Loaded persisted data from server/data/*.json'); }
   }
 }
 
 async function seedInitialData() {
   try {
     const defaultRentals = [
-      ['1', 'Honda Activa 6G', 'Campus Scooters Sanquelim', 'Scooter', 350, 4.9, 142, '0.8 km away', 'Petrol', 'Automatic', 'Verified Vendor,Helmets Included', 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim. Clean helmets included.', 'GIM Main Gate', '+919876500001', true, 'ACTIVE'],
-      ['1', 'Honda City 1.5 i-VTEC', 'Goa Coastal Drive Rentals', 'Car', 2200, 4.8, 98, '1.5 km away', 'Petrol', 'Automatic', 'Sunroof,Sedan,AC', 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips & group airport travel.', 'Sanquelim Circle', '+919876500002', true, 'ACTIVE'],
-      ['1', 'Hyundai Verna 1.5 Turbo', 'Bicholim Self-Drive Motors', 'Car', 2400, 4.9, 84, '2.1 km away', 'Petrol', 'Manual', 'Turbo,Bose Audio,Ventilated Seats', 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa coastline exploration.', 'Bicholim / GIM Gate', '+919876500003', true, 'ACTIVE'],
-      ['1', 'Royal Enfield Hunter 350', 'North Goa Bike Rentals', 'Bike', 750, 4.8, 65, '1.0 km away', 'Petrol', 'Manual', 'Cruiser,Helmets Included', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Comfortable 350cc cruiser bike perfect for scenic coastal highway rides.', 'GIM Main Gate', '+919876500004', true, 'ACTIVE']
+      ['1', 'Honda Activa 6G', 'Campus Scooters Sanquelim', 'Scooter', 350, 95000, 4.9, 142, '0.8 km away', 'Petrol', 'Automatic', 'Verified Vendor,Helmets Included', 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim. Clean helmets included.', 'GIM Main Gate', '+919876500001', true, true, 'ACTIVE'],
+      ['1', 'Honda City 1.5 i-VTEC', 'Goa Coastal Drive Rentals', 'Car', 2200, 1150000, 4.8, 98, '1.5 km away', 'Petrol', 'Automatic', 'Sunroof,Sedan,AC', 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips & group airport travel.', 'Sanquelim Circle', '+919876500002', true, true, 'ACTIVE'],
+      ['1', 'Hyundai Verna 1.5 Turbo', 'Bicholim Self-Drive Motors', 'Car', 2400, 1400000, 4.9, 84, '2.1 km away', 'Petrol', 'Manual', 'Turbo,Bose Audio,Ventilated Seats', 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa coastline exploration.', 'Bicholim / GIM Gate', '+919876500003', true, true, 'ACTIVE'],
+      ['1', 'Royal Enfield Hunter 350', 'North Goa Bike Rentals', 'Bike', 750, 170000, 4.8, 65, '1.0 km away', 'Petrol', 'Manual', 'Cruiser,Helmets Included', 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', 'Comfortable 350cc cruiser bike perfect for scenic coastal highway rides.', 'GIM Main Gate', '+919876500004', true, true, 'ACTIVE']
     ];
 
     for (const r of defaultRentals) {
       const [existing] = await pool.query('SELECT id FROM rentals WHERE title = ? AND vendor = ? AND status != "DELETED"', [r[1], r[2]]);
       if (!existing || existing.length === 0) {
         await pool.query(
-          'INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, vendor_phone, is_available, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO rentals (vendor_user_id, title, vendor, category, price_per_day, sale_price, rating, total_ratings, distance, fuel, transmission, tags, image, description, location, vendor_phone, is_available, is_for_sale, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           r
         );
+      } else {
+        // Backfill sale_price/is_for_sale for existing demo rows that predate buy feature
+        try {
+          await pool.query('UPDATE rentals SET sale_price = COALESCE(sale_price, CASE WHEN category="Scooter" THEN 95000 WHEN category="Car" AND title LIKE "%City%" THEN 1150000 WHEN category="Car" THEN 1400000 ELSE 170000 END), is_for_sale = COALESCE(is_for_sale, TRUE) WHERE title = ? AND vendor = ? AND (sale_price IS NULL OR is_for_sale IS NULL)', [r[1], r[2]]);
+        } catch (e) {}
       }
     }
 
@@ -592,14 +693,24 @@ async function seedInitialData() {
   }
 }
 
-function seedMemoryData() {
-  memoryStore.rentals = [
-    { id: 1, vendor_user_id: '1', title: 'Honda Activa 6G', vendor: 'Campus Scooters Sanquelim', category: 'Scooter', price_per_day: 350, rating: 4.9, total_ratings: 142, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Verified Vendor,Helmets Included', image: 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', description: 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim.', location: 'GIM Main Gate', is_available: true, status: 'ACTIVE', vendor_phone: '+919876500001' },
-    { id: 2, vendor_user_id: '1', title: 'Honda City 1.5 i-VTEC', vendor: 'Goa Coastal Drive Rentals', category: 'Car', price_per_day: 2200, rating: 4.8, total_ratings: 98, distance: '1.5 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Sunroof,Sedan,AC', image: 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', description: 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips.', location: 'Sanquelim Circle', is_available: true, status: 'ACTIVE', vendor_phone: '+919876500002' },
-    { id: 3, vendor_user_id: '1', title: 'Hyundai Verna 1.5 Turbo', vendor: 'Bicholim Self-Drive Motors', category: 'Car', price_per_day: 2400, rating: 4.9, total_ratings: 84, distance: '2.1 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Turbo,Bose Audio,Ventilated Seats', image: 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', description: 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa driving.', location: 'Bicholim / GIM Gate', is_available: true, status: 'ACTIVE', vendor_phone: '+919876500003' }
+function seedMemoryData(opts = {}) {
+  const mergeOnly = Boolean(opts.mergeOnly);
+  const defaultRentals = [
+    { id: 1, vendor_user_id: '1', title: 'Honda Activa 6G', vendor: 'Campus Scooters Sanquelim', category: 'Scooter', price_per_day: 350, sale_price: 95000, rating: 4.9, total_ratings: 142, distance: '0.8 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Verified Vendor,Helmets Included', image: 'https://htcms-prod-images.s3.ap-south-1.amazonaws.com/htmobile1/honda_activa6g/images/colours_honda-activa6g_matte-steel-black-metallic_600x400.jpg', description: 'Reliable 110cc automatic scooter for quick campus commutes, local market runs & beach rides around Sanquelim.', location: 'GIM Main Gate', is_available: true, is_for_sale: true, status: 'ACTIVE', vendor_phone: '+919876500001' },
+    { id: 2, vendor_user_id: '1', title: 'Honda City 1.5 i-VTEC', vendor: 'Goa Coastal Drive Rentals', category: 'Car', price_per_day: 2200, sale_price: 1150000, rating: 4.8, total_ratings: 98, distance: '1.5 km away', fuel: 'Petrol', transmission: 'Automatic', tags: 'Sunroof,Sedan,AC', image: 'https://www.hondacarindia.com/_next/image?url=https%3A%2F%2Fwww.hondacarindia.com%2Fweb-data%2Fmodels%2F2026%2FhondaCity%2FBookingImage%2FMobile%2FCITY_EHEV_GREY_01_mob_01.jpg&w=3840&q=75', description: 'Premium 5-seater sedan with sunroof, automatic transmission, full AC. Perfect for South Goa weekend trips.', location: 'Sanquelim Circle', is_available: true, is_for_sale: true, status: 'ACTIVE', vendor_phone: '+919876500002' },
+    { id: 3, vendor_user_id: '1', title: 'Hyundai Verna 1.5 Turbo', vendor: 'Bicholim Self-Drive Motors', category: 'Car', price_per_day: 2400, sale_price: 1400000, rating: 4.9, total_ratings: 84, distance: '2.1 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Turbo,Bose Audio,Ventilated Seats', image: 'https://imgd.aeplcdn.com/1920x1080/n/cw/ec/204398/verna-exterior-right-front-three-quarter.png?isig=0&q=80&q=80', description: 'Sporty sedan with ventilated seats, Bose sound system, high highway stability for Panjim & North Goa driving.', location: 'Bicholim / GIM Gate', is_available: true, is_for_sale: true, status: 'ACTIVE', vendor_phone: '+919876500003' },
+    { id: 4, vendor_user_id: '1', title: 'Royal Enfield Hunter 350', vendor: 'North Goa Bike Rentals', category: 'Bike', price_per_day: 750, sale_price: 170000, rating: 4.8, total_ratings: 65, distance: '1.0 km away', fuel: 'Petrol', transmission: 'Manual', tags: 'Cruiser,Helmets Included', image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=800&q=80', description: 'Comfortable 350cc cruiser bike perfect for scenic coastal highway rides.', location: 'GIM Main Gate', is_available: true, is_for_sale: true, status: 'ACTIVE', vendor_phone: '+919876500004' }
   ];
+  if (mergeOnly) {
+    if (!Array.isArray(memoryStore.rentals) || memoryStore.rentals.length === 0) memoryStore.rentals = defaultRentals;
+    else {
+      const existingIds = new Set(memoryStore.rentals.map(r => String(r.id)));
+      const existingKeys = new Set(memoryStore.rentals.map(r => `${String(r.title).trim().toLowerCase()}|${String(r.vendor).trim().toLowerCase()}`));
+      for (const d of defaultRentals) if (!existingIds.has(String(d.id)) && !existingKeys.has(`${String(d.title).trim().toLowerCase()}|${String(d.vendor).trim().toLowerCase()}`)) memoryStore.rentals.push(d);
+    }
+  } else memoryStore.rentals = defaultRentals;
 
-  memoryStore.explore_places = [
+  const defaultPlaces = [
     { id: 1, name: 'Mandrem Beach & Lagoon (Vaayu)', category: 'Beaches', rating: 4.9, distance: '36 km · 55 min scooter', price: '₹450 per person', image: 'https://lh3.googleusercontent.com/gps-cs-s/AHRPTWmNAdAa4scSmp9HvmfB4119rUKGLcLQ6Hs5iRVq5480vFQpFuBJ7b1pVPxp9XtEFEbd8YmSaprqd3ISn2DXz7GKDGJEhHcRmJSveQxuJUP88AKbIbPbkrS7X5OFhwsWyWFWAybF=s1360-w1360-h1020-rw', is_bookmarked: false, description: 'Beautiful beach & Mandrem lagoon.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Mandrem+Beach+Vaayu+Goa', best_time: '7:00 AM – 11:00 AM', est_cost: '₹450 / person', pro_tips: 'Smoothie bowls & SUP boards at Vaayu.' },
     { id: 2, name: 'La Plage Restaurant (Ashwem)', category: 'Food', rating: 4.9, distance: '34 km · 50 min scooter', price: '₹1200 per person', image: 'https://lh3.googleusercontent.com/gps-cs-s/AHRPTWlIZmwzW71PgFTPgcRP34wdpgQXFBIcvcOA9xTNRGRrLaUkv-gRnlos9gbpLAZ05t_QGBT3bU6JRAgTpryOtp8WkDdbDAuRv3kG9mnl75NjrDlEKFut5nBR9GOa1WuWlufG7KSe=s1360-w1360-h1020-rw', is_bookmarked: false, description: 'French fine dining on Ashwem Beach.', maps_url: 'https://www.google.com/maps/search/?api=1&query=La+Plage+Ashwem+Beach+Goa', best_time: '1:00 PM – 4:00 PM', est_cost: '₹1200 / person', pro_tips: 'Try the beef fillet steak.' },
     { id: 3, name: 'Pink Chilli Restaurant (Arpora)', category: 'Food', rating: 4.8, distance: '31 km · 48 min scooter', price: '₹700 per person', image: 'https://dynamic-media-cdn.tripadvisor.com/media/photo-o/0e/3c/49/2e/photo0jpg.jpg?w=2000&h=-1&s=1', is_bookmarked: false, description: 'North Indian restaurant with bohemian huts.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Pink+Chilli+Restaurant+Goa', best_time: '7:30 PM – 11:00 PM', est_cost: '₹700 / person', pro_tips: 'Instagram photo ops.' },
@@ -627,13 +738,24 @@ function seedMemoryData() {
 
     { id: 26, name: 'Shri Mangueshi Temple (Ponda)', category: 'Shopping', rating: 4.9, distance: '22 km · 35 min scooter', price: 'Free Entry', image: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=800&q=80', is_bookmarked: false, description: '400-year-old architectural masterpiece with a 7-storey lamp tower.', maps_url: 'https://www.google.com/maps/search/?api=1&query=Mangueshi+Temple+Ponda+Goa', best_time: '6:00 AM – 9:00 PM', est_cost: 'Free Entry', pro_tips: 'Illuminated beautifully during evening aarti.' }
   ];
+  if (mergeOnly) {
+    if (!Array.isArray(memoryStore.explore_places) || memoryStore.explore_places.length === 0) memoryStore.explore_places = defaultPlaces;
+    else {
+      const existingNames = new Set(memoryStore.explore_places.map(p => String(p.name).trim().toLowerCase()));
+      for (const d of defaultPlaces) if (!existingNames.has(String(d.name).trim().toLowerCase())) memoryStore.explore_places.push(d);
+    }
+  } else memoryStore.explore_places = defaultPlaces;
 
-  memoryStore.place_reviews = [
-    { id: 1, place_id: 1, user_name: 'Rishi Hotwani', user_avatar: 'RH', rating: 5, comment: 'Amazing sunset spot!', created_at: new Date().toISOString() }
-  ];
-  memoryStore.travel_trips = [
-    { id: 1, user_name: 'Rahul Verma', user_initials: 'RV', batch_info: 'PGDM 2026', title: 'Airport Share (Goa MOPA to GIM Campus)', pickup: 'MOPA Airport Terminal', date_time: 'Today 6:00 PM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹450 each', description: 'Flight arrives 5:30 PM. 2 seats free for GIM students.', status: 'ACTIVE', contact_phone: '+919876543210' }
-  ];
+  const defaultTrips = [{ id: 1, user_name: 'Rahul Verma', user_initials: 'RV', batch_info: 'PGDM 2026', title: 'Airport Share (Goa MOPA to GIM Campus)', pickup: 'MOPA Airport Terminal', date_time: 'Today 6:00 PM', seats_left: 2, seats_total: 4, vehicle_type: 'Cab', cost: '₹450 each', description: 'Flight arrives 5:30 PM. 2 seats free for GIM students.', status: 'ACTIVE', contact_phone: '+919876543210' }];
+  if (mergeOnly) {
+    if (!Array.isArray(memoryStore.travel_trips) || memoryStore.travel_trips.length === 0) memoryStore.travel_trips = defaultTrips;
+    else if (!memoryStore.travel_trips.some(t => String(t.id)==='1')) memoryStore.travel_trips.unshift(defaultTrips[0]);
+  } else memoryStore.travel_trips = defaultTrips;
+
+  if (!mergeOnly || !Array.isArray(memoryStore.place_reviews) || memoryStore.place_reviews.length === 0) {
+    memoryStore.place_reviews = [{ id: 1, place_id: 1, user_name: 'Rishi Hotwani', user_avatar: 'RH', rating: 5, comment: 'Amazing sunset spot!', created_at: new Date().toISOString() }];
+  }
+  try { persistAllMemory(); } catch {}
 
   // Seed admin user for in-memory fallback
   (async () => {
@@ -771,6 +893,7 @@ export async function query(sql, params = []) {
       created_at: new Date().toISOString()
     };
     memoryStore.rental_bookings.push(bk);
+    try { persistMemory('rental_bookings'); } catch {}
     return { insertId: bk.id };
   }
   if (lowerSql.includes('update rental_bookings set status =') || lowerSql.includes('update rental_bookings set booking_status =')) {
@@ -781,6 +904,7 @@ export async function query(sql, params = []) {
       b.payment_status = params[0];
       if (params[1]) b.razorpay_payment_id = params[1];
     }
+    try { persistMemory('rental_bookings'); } catch {}
     return { affectedRows: 1 };
   }
 
@@ -825,12 +949,14 @@ export async function query(sql, params = []) {
     if (!memoryStore.user_bookmarks.some(b => String(b.user_id) === uid && Number(b.place_id) === pid)) {
       memoryStore.user_bookmarks.push({ id: memoryStore.user_bookmarks.length + 1, user_id: uid, place_id: pid, created_at: new Date().toISOString() });
     }
+    try { persistMemory('user_bookmarks'); } catch {}
     return { insertId: 1 };
   }
   if (lowerSql.includes('delete from user_bookmarks')) {
     const uid = String(params[0]);
     const pid = Number(params[1]);
     memoryStore.user_bookmarks = memoryStore.user_bookmarks.filter(b => !(String(b.user_id) === uid && Number(b.place_id) === pid));
+    try { persistMemory('user_bookmarks'); } catch {}
     return { affectedRows: 1 };
   }
 
@@ -849,6 +975,8 @@ export async function query(sql, params = []) {
       created_at: new Date().toISOString()
     };
     memoryStore.place_reviews.push(newRev);
+    try { persistMemory('place_reviews'); } catch {}
+    // also persist explore_places rating update is handled via explore_places persist in review route
     return { insertId: newRev.id };
   }
   if (lowerSql.includes('select id from explore_places where lower(trim(name))')) {
@@ -874,6 +1002,7 @@ export async function query(sql, params = []) {
       is_active: true
     };
     memoryStore.explore_places.push(newPlace);
+    try { persistMemory('explore_places'); } catch {}
     return { insertId: newPlace.id, affectedRows: 1 };
   }
   if (lowerSql.includes('inner join user_bookmarks')) {
@@ -899,21 +1028,24 @@ export async function query(sql, params = []) {
       vendor: params[2],
       category: params[3],
       price_per_day: Number(params[4]),
+      sale_price: params[5] ? Number(params[5]) : null,
       rating: 5.0,
       total_ratings: 1,
       distance: '0.5 km away',
-      fuel: params[5] || 'Petrol',
-      transmission: params[6] || 'Automatic',
-      tags: params[7] || 'Verified Vendor',
-      image: params[8],
-      description: params[9] || '',
-      location: params[10] || 'Sanquelim / Campus Gate',
-      vendor_phone: params[11] || null,
+      fuel: params[6] || 'Petrol',
+      transmission: params[7] || 'Automatic',
+      tags: params[8] || 'Verified Vendor',
+      image: params[9],
+      description: params[10] || '',
+      location: params[11] || 'Sanquelim / Campus Gate',
+      vendor_phone: params[12] || null,
+      is_for_sale: params[13] !== undefined ? Boolean(params[13]) : true,
       is_available: true,
       status: 'ACTIVE',
       created_at: new Date().toISOString()
     };
     memoryStore.rentals.unshift(newRental);
+    try { persistMemory('rentals'); } catch {}
     return { insertId: newRental.id, affectedRows: 1 };
   }
 
@@ -929,6 +1061,7 @@ export async function query(sql, params = []) {
     const rid = Number(params[0]);
     const item = memoryStore.rentals.find(r => Number(r.id) === rid);
     if (item) item.is_available = !item.is_available;
+    try { persistMemory('rentals'); } catch {}
     return { affectedRows: 1 };
   }
 
@@ -939,6 +1072,76 @@ export async function query(sql, params = []) {
       item.status = 'DELETED';
       item.is_available = false;
     }
+    try { persistMemory('rentals'); } catch {}
+    return { affectedRows: 1 };
+  }
+
+  // Vehicle purchases (Buy flow) — must be checked before generic vehicle_purchases handlers that also match from rentals?
+  if (lowerSql.includes('from vehicle_purchases')) {
+    // SELECT * FROM vehicle_purchases WHERE user_id = ? OR vendor_user_id = ?  OR  WHERE razorpay_order_id = ? OR id = ?
+    if (lowerSql.includes('razorpay_order_id')) {
+      const oid = params[0];
+      const bid = params[1];
+      return memoryStore.vehicle_purchases.filter(p => p.razorpay_order_id === oid || String(p.id) === String(bid));
+    }
+    const uid = String(params[0]);
+    const vid = params[1] ? String(params[1]) : uid;
+    return memoryStore.vehicle_purchases.filter(p => String(p.user_id) === uid || String(p.vendor_user_id) === vid);
+  }
+  if (lowerSql.includes('insert into vehicle_purchases')) {
+    const np = {
+      id: memoryStore.vehicle_purchases.length + 1,
+      rental_id: Number(params[0]),
+      user_id: String(params[1]),
+      user_name: params[2],
+      user_email: params[3],
+      user_phone: params[4],
+      vendor_user_id: String(params[5]),
+      vehicle_title: params[6],
+      sale_price: Number(params[7]),
+      gst_amount: Number(params[8]),
+      service_fee: Number(params[9]),
+      total_amount: Number(params[10]),
+      razorpay_order_id: params[11],
+      payment_status: 'PENDING',
+      created_at: new Date().toISOString()
+    };
+    memoryStore.vehicle_purchases.push(np);
+    try { persistMemory('vehicle_purchases'); } catch {}
+    return { insertId: np.id, affectedRows: 1 };
+  }
+  if (lowerSql.includes('update vehicle_purchases set')) {
+    const pid = params[params.length - 1];
+    const oid = params[params.length - 2];
+    // Handles both PAID and FAILED paths: query("UPDATE vehicle_purchases SET payment_status = ?, razorpay_payment_id = ?, razorpay_signature = ? WHERE razorpay_order_id = ? OR id = ?", [...])
+    const p = memoryStore.vehicle_purchases.find(x => x.razorpay_order_id === oid || String(x.id) === String(pid));
+    if (p) {
+      p.payment_status = params[0];
+      if (params[1]) p.razorpay_payment_id = params[1];
+      if (params[2]) p.razorpay_signature = params[2];
+    }
+    // Also handle sold marking via rentals
+    if (params[0] === 'PAID' && p) {
+      const rv = memoryStore.rentals.find(r => Number(r.id) === Number(p.rental_id));
+      if (rv) { rv.status = 'SOLD'; rv.is_available = false; rv.is_for_sale = false; }
+      try { persistMemory('rentals'); persistMemory('vehicle_purchases'); } catch {}
+    } else {
+      try { persistMemory('vehicle_purchases'); } catch {}
+    }
+    return { affectedRows: p ? 1 : 0 };
+  }
+  if (lowerSql.includes('select 1 from vehicle_purchases') || lowerSql.includes('select id from vehicle_purchases')) {
+    const rid = Number(params[0]);
+    const found = memoryStore.vehicle_purchases.find(p => Number(p.rental_id) === rid && p.payment_status === 'PAID');
+    return found ? [found] : [];
+  }
+
+  // Mark rentals as SOLD
+  if (lowerSql.includes("update rentals set status = 'sold'")) {
+    const rid = Number(params[0]);
+    const rv = memoryStore.rentals.find(r => Number(r.id) === rid);
+    if (rv) { rv.status = 'SOLD'; rv.is_available = false; rv.is_for_sale = false; }
+    try { persistMemory('rentals'); } catch {}
     return { affectedRows: 1 };
   }
 
@@ -971,6 +1174,7 @@ export async function query(sql, params = []) {
       created_at: new Date().toISOString()
     };
     memoryStore.travel_trips.unshift(newTrip);
+    try { persistMemory('travel_trips'); } catch {}
     return { insertId: newTrip.id, affectedRows: 1 };
   }
 
@@ -978,6 +1182,7 @@ export async function query(sql, params = []) {
     const tid = Number(params[0]);
     const t = memoryStore.travel_trips.find(x => Number(x.id) === tid);
     if (t) t.seats_left = Math.max(0, (t.seats_left || 1) - 1);
+    try { persistMemory('travel_trips'); } catch {}
     return { affectedRows: 1 };
   }
 
@@ -992,6 +1197,7 @@ export async function query(sql, params = []) {
       if (params[4] !== null) t.cost = params[4];
       if (params[5] !== null) t.description = params[5];
     }
+    try { persistMemory('travel_trips'); } catch {}
     return { affectedRows: 1 };
   }
 
@@ -1007,6 +1213,7 @@ export async function query(sql, params = []) {
       created_at: new Date().toISOString()
     };
     memoryStore.trip_messages.push(newMsg);
+    try { persistMemory('trip_messages'); } catch {}
     return { insertId: newMsg.id, affectedRows: 1 };
   }
 

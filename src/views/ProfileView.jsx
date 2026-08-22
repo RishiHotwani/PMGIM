@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Bookmark, LogOut, Phone, ShieldCheck, Store, Sparkles, CheckCircle2, HelpCircle, ChevronDown } from 'lucide-react';
+import { User, Mail, Bookmark, LogOut, Phone, ShieldCheck, Store, Sparkles, CheckCircle2, HelpCircle, ChevronDown, ShoppingBag } from 'lucide-react';
 import SpotDetailModal from '../components/SpotDetailModal';
 import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +12,8 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
   const [updatingRole, setUpdatingRole] = useState(false);
   const [roleMsg, setRoleMsg] = useState('');
   const [openFaq, setOpenFaq] = useState(null);
+  const [purchases, setPurchases] = useState([]);
+  const [purchasesLoading, setPurchasesLoading] = useState(true);
 
   const isVendorRole = currentUser?.role === 'VENDOR' || currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
@@ -48,9 +50,30 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
     }
   };
 
+  const fetchPurchases = async () => {
+    const targetId = currentUser?.id || currentUser?.uuid || currentUser?.email;
+    if (!targetId) { setPurchasesLoading(false); return; }
+    try {
+      const res = await fetch('/api/purchases', {
+        headers: {
+          'x-user-id': String(currentUser?.id || ''),
+          'x-user-uuid': String(currentUser?.uuid || ''),
+          'x-user-email': String(currentUser?.email || ''),
+          'Cache-Control': 'no-store'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPurchases(Array.isArray(data) ? data : []);
+      }
+    } catch (e) { console.error('Fetch purchases error', e); }
+    finally { setPurchasesLoading(false); }
+  };
+
   useEffect(() => {
     if (currentUser?.id || currentUser?.uuid || currentUser?.email) {
       fetchPrivateBookmarks();
+      fetchPurchases();
     }
   }, [currentUser]);
 
@@ -183,8 +206,45 @@ export default function ProfileView({ currentUser, onLogout, onLogAction, places
           </div>
         </div>
 
-        {/* Right Column: Private Bookmarks */}
-        <div className="space-y-4 lg:col-span-2">
+        {/* Right Column: Private Bookmarks + My Purchases */}
+        <div className="space-y-6 lg:col-span-2">
+          {/* My Purchases — visible proof of Buy flow */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-md space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-amber-600" />
+                My Purchases ({purchases.length})
+              </h3>
+              <span className="text-[11px] font-bold text-slate-400">Shows every successful Buy — buyer + vendor see it</span>
+            </div>
+            {purchasesLoading ? (
+              <div className="p-6 text-center text-xs font-bold text-slate-400">Loading purchases…</div>
+            ) : purchases.length === 0 ? (
+              <div className="p-8 bg-amber-50/50 rounded-2xl border border-amber-100 text-center space-y-2">
+                <ShoppingBag className="w-8 h-8 text-amber-300 mx-auto" />
+                <p className="font-bold text-slate-700 text-sm">No purchases yet</p>
+                <p className="text-xs text-slate-500">Go to Rentals → tap <b>Buy Now</b> on any vehicle with a sale price. Paid purchases appear here and the vehicle shows <b>SOLD</b> in Rentals.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {purchases.map(p => {
+                  const isBuyer = String(p.user_id) === String(currentUser?.id || currentUser?.uuid);
+                  return (
+                    <div key={p.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-black text-slate-900">{p.vehicle_title} <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-black ${p.payment_status==='PAID' ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}`}>{p.payment_status}</span> <span className="ml-1 px-2 py-0.5 bg-white border border-slate-200 rounded-full text-[10px] font-bold">{isBuyer ? 'You bought' : 'You sold'}</span></p>
+                        <p className="text-xs text-slate-600">₹{Number(p.total_amount).toLocaleString('en-IN')} (sale ₹{Number(p.sale_price).toLocaleString('en-IN')} + GST ₹{Number(p.gst_amount).toLocaleString('en-IN')} + fee ₹{Number(p.service_fee)})</p>
+                        <p className="text-[11px] text-slate-500">{new Date(p.created_at).toLocaleString('en-IN')} • Order {p.razorpay_order_id}</p>
+                        <p className="text-[11px] text-slate-500">{isBuyer ? `Seller ID: ${p.vendor_user_id}` : `Buyer: ${p.user_name} • ${p.user_email} • ${p.user_phone}`}</p>
+                      </div>
+                      <span className="text-[11px] font-black text-slate-500"># {p.id}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
               <Bookmark className="w-5 h-5 text-blue-600" />
