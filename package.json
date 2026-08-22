@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "concurrently \"npm run server\" \"vite\"",
     "server": "NODE_OPTIONS=--max-old-space-size=384 --optimize-for-size node server/index.js",
-    "start": "npm run build && NODE_OPTIONS=--max-old-space-size=384 --optimize-for-size node server/index.js",
+    "start": "NODE_OPTIONS=--max-old-space-size=384 --optimize-for-size node server/index.js",
+    "start:prod": "npm run build && NODE_OPTIONS=--max-old-space-size=384 --optimize-for-size node server/index.js",
     "start:dev": "concurrently \"npm run server\" \"vite\"",
     "build": "vite build",
     "lint": "eslint .",
