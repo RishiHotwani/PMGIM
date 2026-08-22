@@ -175,22 +175,35 @@ export async function createRental(currentUser, formData) {
 // ─── UPDATE RENTAL (authenticated) ──────────────────────────
 
 export async function updateRental(currentUser, vehicleId, updates) {
-  const res = await fetch(`/api/rentals/${vehicleId}`, {
+  const makeRequest = (extraHeaders = {}) => fetch(`/api/rentals/${vehicleId}`, {
     method: 'PATCH',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...NO_CACHE_HEADERS,
-      ...getAuthHeaders(currentUser)
+      ...getAuthHeaders(currentUser),
+      ...extraHeaders
     },
     body: JSON.stringify(updates)
   });
-
-  const data = await res.json();
-
+  let res = await makeRequest();
+  let data = await res.json().catch(() => ({}));
+  if (!res.ok && res.status === 401) {
+    try {
+      const refreshRes = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+      if (refreshRes.ok) {
+        const rd = await refreshRes.json();
+        if (rd.accessToken) {
+          try { localStorage.setItem('gim_token', rd.accessToken); } catch {}
+          res = await makeRequest({ 'Authorization': `Bearer ${rd.accessToken}` });
+          data = await res.json().catch(() => ({}));
+        }
+      }
+    } catch {}
+  }
   if (!res.ok || !data.success) {
     throw new Error(data.message || 'Failed to update vehicle.');
   }
-
   return data;
 }
 

@@ -17,7 +17,9 @@ const DATA_FILES = {
   rental_bookings: path.join(DATA_DIR, 'rental_bookings.json'),
   users: path.join(DATA_DIR, 'users.json'),
   trip_participants: path.join(DATA_DIR, 'trip_participants.json'),
+  trip_messages: path.join(DATA_DIR, 'trip_messages.json'),
   user_bookmarks: path.join(DATA_DIR, 'user_bookmarks.json'),
+  place_reviews: path.join(DATA_DIR, 'place_reviews.json'),
 };
 
 let pool = null;
@@ -881,12 +883,14 @@ export async function query(sql, params = []) {
       vehicle_title: params[6],
       days: params[7],
       start_date: params[8],
-      daily_rate: params[9],
-      deposit: params[10],
-      service_fee: params[11],
-      gst_amount: params[12],
-      total_amount: params[13],
-      razorpay_order_id: params[14],
+      end_date: params[9],
+      daily_rate: Number(params[10]),
+      rental_amount: Number(params[11]),
+      deposit: Number(params[12]),
+      service_fee: Number(params[13]),
+      gst_amount: Number(params[14]),
+      total_amount: Number(params[15]),
+      razorpay_order_id: params[16],
       status: 'PENDING',
       booking_status: 'PENDING_PAYMENT',
       payment_status: 'PENDING',
@@ -896,13 +900,55 @@ export async function query(sql, params = []) {
     try { persistMemory('rental_bookings'); } catch {}
     return { insertId: bk.id };
   }
-  if (lowerSql.includes('update rental_bookings set status =') || lowerSql.includes('update rental_bookings set booking_status =')) {
-    const b = memoryStore.rental_bookings.find(x => x.razorpay_order_id === params[2] || String(x.id) === String(params[2]));
-    if (b) {
-      b.status = params[0];
-      b.booking_status = params[0] === 'PAID' ? 'CONFIRMED' : params[0];
-      b.payment_status = params[0];
-      if (params[1]) b.razorpay_payment_id = params[1];
+  if (lowerSql.includes('update rental_bookings set')) {
+    // Handles both:
+    //  UPDATE rental_bookings SET payment_status = 'FAILED', booking_status = 'CANCELLED' WHERE razorpay_order_id = ? OR id = ?
+    //  UPDATE rental_bookings SET payment_status = 'PAID', booking_status = 'CONFIRMED', razorpay_payment_id = ?, razorpay_signature = ? WHERE razorpay_order_id = ? OR id = ?
+    const has4 = lowerSql.includes('razorpay_payment_id');
+    if (has4) {
+      const paymentStatus = params[0];
+      const bookingStatus = lowerSql.includes("'paid'") || String(paymentStatus).toUpperCase() === 'PAID' ? 'CONFIRMED' : paymentStatus;
+      // params: [razorpay_payment_id, razorpay_signature, razorpay_order_id, booking_id] OR [payment_status, booking_status, ...]? detect by count
+      // Verify path: payment_status is first, but our verify sends [razorpay_payment_id, sig, order_id, booking_id] with SET payment_status='PAID' hardcoded in SQL not param
+      // So for verify SQL, params[0]=payment_id, params[1]=sig, params[2]=order_id, params[3]=id — need to set status to PAID/CONFIRMED
+      // For generic update with payment_status param, handle both
+      const orderId = params[params.length - 2];
+      const bid = params[params.length - 1];
+      const b = memoryStore.rental_bookings.find(x => x.razorpay_order_id === orderId || String(x.id) === String(bid));
+      if (b) {
+        // If SQL hardcodes PAID, params[0] is actually payment_id not status
+        if (lowerSql.includes("payment_status = 'paid'") || lowerSql.includes('payment_status = \'paid\'')) {
+          b.payment_status = 'PAID';
+          b.booking_status = 'CONFIRMED';
+          b.status = 'CONFIRMED';
+          if (params[0]) b.razorpay_payment_id = params[0];
+          if (params[1]) b.razorpay_signature = params[1];
+        } else if (lowerSql.includes("payment_status = 'failed'")) {
+          b.payment_status = 'FAILED';
+          b.booking_status = 'CANCELLED';
+          b.status = 'CANCELLED';
+          if (params[0]) b.razorpay_payment_id = params[0];
+        } else {
+          // generic param version
+          b.payment_status = params[0];
+          b.booking_status = params[1] || (String(params[0]).toUpperCase()==='PAID'?'CONFIRMED':'CANCELLED');
+          b.status = b.booking_status;
+          if (params[2]) b.razorpay_payment_id = params[2];
+          if (params[3]) b.razorpay_signature = params[3];
+        }
+      }
+      try { persistMemory('rental_bookings'); } catch {}
+      return { affectedRows: 1 };
+    }
+    // Simple status update: UPDATE rental_bookings SET payment_status = ? , booking_status = ?  with 2 status params
+    const orderIdS = params[params.length - 2];
+    const bidS = params[params.length - 1];
+    const b2 = memoryStore.rental_bookings.find(x => x.razorpay_order_id === orderIdS || String(x.id) === String(bidS));
+    if (b2) {
+      b2.payment_status = params[0];
+      b2.booking_status = params[1] || params[0];
+      b2.status = b2.booking_status;
+      if (params[2]) b2.razorpay_payment_id = params[2];
     }
     try { persistMemory('rental_bookings'); } catch {}
     return { affectedRows: 1 };
@@ -1010,6 +1056,41 @@ export async function query(sql, params = []) {
     const bookmarkedIds = new Set(memoryStore.user_bookmarks.filter(b => String(b.user_id) === uid).map(b => Number(b.place_id)));
     return memoryStore.explore_places.filter(p => bookmarkedIds.has(Number(p.id)));
   }
+  if (lowerSql.includes('update explore_places set rating')) {
+    const newRating = params[0];
+    const pid = Number(params[1]);
+    const p = memoryStore.explore_places.find(x => Number(x.id) === pid);
+    if (p) p.rating = Number(newRating);
+    try { persistMemory('explore_places'); } catch {}
+    return { affectedRows: p ? 1 : 0 };
+  }
+  if (lowerSql.includes('update explore_places set')) {
+    const pid = Number(params[params.length - 1]);
+    const p = memoryStore.explore_places.find(x => Number(x.id) === pid);
+    if (p) {
+      // params: name, category, image, description, maps_url, best_time, est_cost, pro_tips, rating, price, distance
+      const [name, category, image, description, maps_url, best_time, est_cost, pro_tips] = params;
+      if (name !== null && name !== undefined) p.name = name;
+      if (category) p.category = category;
+      if (image) p.image = image;
+      if (description) p.description = description;
+      if (maps_url !== undefined) p.maps_url = maps_url;
+      if (best_time) p.best_time = best_time;
+      if (est_cost) { p.est_cost = est_cost; p.price = est_cost; }
+      if (pro_tips !== undefined) p.pro_tips = pro_tips;
+    }
+    try { persistMemory('explore_places'); } catch {}
+    return { affectedRows: p ? 1 : 0 };
+  }
+  if (lowerSql.includes('delete from explore_places') || lowerSql.includes('update explore_places set is_active')) {
+    const pid = Number(params[0]);
+    const p = memoryStore.explore_places.find(x => Number(x.id) === pid);
+    if (p) p.is_active = false;
+    // also remove bookmarks for that place
+    memoryStore.user_bookmarks = memoryStore.user_bookmarks.filter(b => Number(b.place_id) !== pid);
+    try { persistMemory('explore_places'); persistMemory('user_bookmarks'); } catch {}
+    return { affectedRows: p ? 1 : 0 };
+  }
   if (lowerSql.includes('from explore_places')) {
     const uid = params[0] ? String(params[0]) : null;
     const bookmarkedSet = new Set(
@@ -1064,6 +1145,24 @@ export async function query(sql, params = []) {
     try { persistMemory('rentals'); } catch {}
     return { affectedRows: 1 };
   }
+  if (lowerSql.includes('update rentals set') && lowerSql.includes('title = coalesce')) {
+    const rid = Number(params[params.length - 1]);
+    const item = memoryStore.rentals.find(r => Number(r.id) === rid);
+    if (item) {
+      const [title, price_per_day, category, fuel, transmission, image, description, location, is_available] = params;
+      if (title !== null && title !== undefined) item.title = title;
+      if (price_per_day !== null && price_per_day !== undefined) item.price_per_day = Number(price_per_day);
+      if (category) item.category = category;
+      if (fuel) item.fuel = fuel;
+      if (transmission) item.transmission = transmission;
+      if (image) item.image = image;
+      if (description) item.description = description;
+      if (location) item.location = location;
+      if (is_available !== null && is_available !== undefined) item.is_available = Boolean(is_available);
+    }
+    try { persistMemory('rentals'); } catch {}
+    return { affectedRows: item ? 1 : 0 };
+  }
 
   if (lowerSql.includes('delete from rentals') || lowerSql.includes('update rentals set status = \'deleted\'')) {
     const rid = Number(params[0]);
@@ -1113,15 +1212,27 @@ export async function query(sql, params = []) {
   if (lowerSql.includes('update vehicle_purchases set')) {
     const pid = params[params.length - 1];
     const oid = params[params.length - 2];
-    // Handles both PAID and FAILED paths: query("UPDATE vehicle_purchases SET payment_status = ?, razorpay_payment_id = ?, razorpay_signature = ? WHERE razorpay_order_id = ? OR id = ?", [...])
     const p = memoryStore.vehicle_purchases.find(x => x.razorpay_order_id === oid || String(x.id) === String(pid));
+    const isHardcodedPaid = lowerSql.includes("payment_status = 'paid'") || lowerSql.includes('payment_status = \'paid\'');
+    const isHardcodedFailed = lowerSql.includes("payment_status = 'failed'");
     if (p) {
-      p.payment_status = params[0];
-      if (params[1]) p.razorpay_payment_id = params[1];
-      if (params[2]) p.razorpay_signature = params[2];
+      if (isHardcodedPaid) {
+        p.payment_status = 'PAID';
+        if (params[0]) p.razorpay_payment_id = params[0];
+        if (params[1]) p.razorpay_signature = params[1];
+      } else if (isHardcodedFailed) {
+        p.payment_status = 'FAILED';
+        if (params[0]) p.razorpay_payment_id = params[0];
+        if (params[1]) p.razorpay_signature = params[1];
+      } else {
+        p.payment_status = params[0];
+        if (params[1]) p.razorpay_payment_id = params[1];
+        if (params[2]) p.razorpay_signature = params[2];
+      }
     }
     // Also handle sold marking via rentals
-    if (params[0] === 'PAID' && p) {
+    const shouldMarkSold = (isHardcodedPaid || params[0] === 'PAID') && p;
+    if (shouldMarkSold) {
       const rv = memoryStore.rentals.find(r => Number(r.id) === Number(p.rental_id));
       if (rv) { rv.status = 'SOLD'; rv.is_available = false; rv.is_for_sale = false; }
       try { persistMemory('rentals'); persistMemory('vehicle_purchases'); } catch {}
@@ -1220,6 +1331,14 @@ export async function query(sql, params = []) {
   if (lowerSql.includes('select * from trip_messages')) {
     const tid = Number(params[0]);
     return memoryStore.trip_messages.filter(m => Number(m.trip_id) === tid);
+  }
+
+  if (lowerSql.includes('delete from travel_trips') || lowerSql.includes('update travel_trips set status = \'cancelled\'')) {
+    const tid = Number(params[0]);
+    const t = memoryStore.travel_trips.find(x => Number(x.id) === tid);
+    if (t) t.status = 'CANCELLED';
+    try { persistMemory('travel_trips'); } catch {}
+    return { affectedRows: t ? 1 : 0 };
   }
 
   if (lowerSql.includes('select * from travel_trips')) return memoryStore.travel_trips.filter(t => t.status !== 'CANCELLED');

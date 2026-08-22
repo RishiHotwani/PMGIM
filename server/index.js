@@ -924,6 +924,40 @@ app.post('/api/explore/:id/reviews', async (req, res, next) => {
   }
 });
 
+app.patch('/api/explore/:id', async (req, res, next) => {
+  try {
+    if (!checkWritePersistence(res)) return;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid place ID.' });
+    const { name, category, image, description, maps_url, best_time, est_cost, pro_tips } = req.body;
+    const existing = await query('SELECT * FROM explore_places WHERE id = ?', [id]);
+    if (!existing || existing.length === 0) return res.status(404).json({ success: false, message: 'Place not found.' });
+    // duplicate name check if name changing
+    if (name && String(name).trim().toLowerCase() !== String(existing[0].name).trim().toLowerCase()) {
+      const dup = await query('SELECT id FROM explore_places WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1', [String(name).trim()]);
+      if (dup && dup.length > 0) return res.status(409).json({ success: false, message: `Place "${String(name).trim()}" already exists.` });
+    }
+    await query(
+      `UPDATE explore_places SET name = COALESCE(?, name), category = COALESCE(?, category), image = COALESCE(?, image), description = COALESCE(?, description), maps_url = COALESCE(?, maps_url), best_time = COALESCE(?, best_time), est_cost = COALESCE(?, est_cost), pro_tips = COALESCE(?, pro_tips) WHERE id = ?`,
+      [name ? String(name).trim() : null, category || null, image || null, description || null, maps_url || null, best_time || null, est_cost || null, pro_tips || null, id]
+    );
+    const updated = await query('SELECT * FROM explore_places WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Place updated successfully!', data: updated[0] || { id } });
+  } catch (err) { next(err); }
+});
+
+app.delete('/api/explore/:id', async (req, res, next) => {
+  try {
+    if (!checkWritePersistence(res)) return;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid place ID.' });
+    const existing = await query('SELECT * FROM explore_places WHERE id = ?', [id]);
+    if (!existing || existing.length === 0) return res.status(404).json({ success: false, message: 'Place not found.' });
+    await query('UPDATE explore_places SET is_active = FALSE WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Place deleted successfully.' });
+  } catch (err) { next(err); }
+});
+
 // ----------------- TRAVEL TRIPS & CONCURRENCY JOIN/LEAVE -----------------
 app.get('/api/trips', async (req, res, next) => {
   try {
@@ -1333,6 +1367,23 @@ app.delete('/api/trips/:id/leave', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+app.delete('/api/trips/:id', async (req, res, next) => {
+  try {
+    if (!checkWritePersistence(res)) return;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Invalid trip ID.' });
+    const hostIdStr = req.user?.id ? String(req.user.id) : (req.headers['x-user-id'] ? String(req.headers['x-user-id']).trim() : '');
+    if (!hostIdStr) return res.status(401).json({ success: false, message: 'Authentication required to delete ride.' });
+    const trips = await query('SELECT * FROM travel_trips WHERE id = ?', [id]);
+    if (trips.length === 0) return res.status(404).json({ success: false, message: 'Trip not found.' });
+    const trip = trips[0];
+    const isOwner = String(trip.host_user_id) === hostIdStr || req.user?.role === 'ADMIN' || req.user?.role === 'SUPER_ADMIN';
+    if (!isOwner) return res.status(403).json({ success: false, message: 'Forbidden. Only the ride host can delete ride.' });
+    await query("UPDATE travel_trips SET status = 'CANCELLED' WHERE id = ?", [id]);
+    res.json({ success: true, message: 'Ride deleted successfully.' });
+  } catch (err) { next(err); }
 });
 
 // ----------------- RIDE MESSAGING ROUTES -----------------

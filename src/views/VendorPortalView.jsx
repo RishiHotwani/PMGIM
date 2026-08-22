@@ -15,6 +15,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
 
   // Guard against double-submit
   const isSubmittingRef = useRef(false);
+  const [editingId, setEditingId] = useState(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -32,6 +33,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
   });
 
   const resetForm = () => {
+    setEditingId(null);
     setFormData({
       title: '',
       category: 'Bike',
@@ -68,7 +70,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
     fetchMyFleet();
   }, [currentUser]);
 
-  // ─── CREATE VEHICLE (database-first, no polling) ───────────
+  // ─── CREATE/EDIT VEHICLE (database-first, no polling) ───────────
   const handlePostVehicle = async (e) => {
     e.preventDefault();
 
@@ -81,17 +83,20 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
     setMsg('');
 
     try {
-      // STEP 1: POST to backend → MySQL INSERT → verify → return DB record
-      const result = await rentalService.createRental(currentUser, formData);
+      const isEdit = Boolean(editingId);
+      const result = isEdit
+        ? await rentalService.updateRental(currentUser, editingId, formData)
+        : await rentalService.createRental(currentUser, formData);
       
       console.log('[VendorPortal] Vehicle created:', {
         id: result.vehicle.id,
         title: result.vehicle.title
       });
 
-      // Update parent App state immediately
-      if (onAddRental && result.vehicle) {
-        onAddRental(result.vehicle);
+      // Update parent App state immediately (create gives vehicle, edit gives updated)
+      const updatedVehicle = result.vehicle || result.data || (editingId ? { id: editingId, ...formData } : null);
+      if (onAddRental && updatedVehicle) {
+        onAddRental(updatedVehicle);
       }
 
       // STEP 2: Refresh vendor fleet from database (race-safe)
@@ -105,7 +110,8 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
 
       // STEP 4: Success
       setVehicleSaveStatus('success');
-      setMsg(`Vehicle "${result.vehicle.title}" verified in database and published for all users!`);
+      const titleForMsg = (result.vehicle && result.vehicle.title) || formData.title;
+      setMsg(editingId ? `Vehicle "${titleForMsg}" updated successfully!` : `Vehicle "${titleForMsg}" verified in database and published for all users!`);
 
       // Auto-close modal after brief success display
       setTimeout(() => {
@@ -170,6 +176,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
 
         <button
           onClick={() => {
+            resetForm();
             setVehicleSaveStatus('idle');
             setSaveErrorMessage('');
             setShowAddModal(true);
@@ -293,7 +300,33 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
                     <span>{item.transmission}</span>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-2">
+                  <div className="flex items-center gap-2 pt-2 flex-wrap">
+                    <button
+                      onClick={() => {
+                        // prefill edit form with existing vehicle
+                        setFormData({
+                          title: item.title || '',
+                          category: item.category || 'Bike',
+                          price_per_day: String(item.price_per_day || ''),
+                          sale_price: item.sale_price ? String(item.sale_price) : '',
+                          is_for_sale: Boolean(item.is_for_sale),
+                          fuel: item.fuel || 'Petrol',
+                          transmission: item.transmission || 'Automatic',
+                          tags: item.tags || 'Verified Vendor',
+                          image: item.image || '',
+                          description: item.description || '',
+                          location: item.location || 'Sanquelim / Campus Gate',
+                          vendor_phone: item.vendor_phone || ''
+                        });
+                        setEditingId(item.id);
+                        setVehicleSaveStatus('idle');
+                        setSaveErrorMessage('');
+                        setShowAddModal(true);
+                      }}
+                      className="py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-extrabold flex items-center gap-1.5"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => handleToggle(item.id)}
                       className={`py-1.5 px-3 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-colors ${
@@ -327,15 +360,15 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <button
                 disabled={isModalBusy}
-                onClick={() => !isModalBusy && setShowAddModal(false)}
+                onClick={() => !isModalBusy && (setShowAddModal(false), resetForm())}
                 className={`px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-full text-xs font-bold text-slate-700 ${isModalBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 ← Back
               </button>
-              <h3 className="font-extrabold text-base text-slate-900">Post New Vehicle Listing</h3>
+              <h3 className="font-extrabold text-base text-slate-900">{editingId ? 'Edit Vehicle Listing' : 'Post New Vehicle Listing'}</h3>
               <button
                 disabled={isModalBusy}
-                onClick={() => !isModalBusy && setShowAddModal(false)}
+                onClick={() => !isModalBusy && (setShowAddModal(false), resetForm())}
                 className={`p-1 rounded-full text-slate-400 hover:bg-slate-100 ${isModalBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 ✕
@@ -501,7 +534,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
                   <button
                     type="button"
                     disabled={isModalBusy}
-                    onClick={() => setShowAddModal(false)}
+                    onClick={() => { setShowAddModal(false); resetForm(); }}
                     className="w-1/3 py-3.5 bg-slate-100 text-slate-700 font-extrabold text-xs rounded-xl hover:bg-slate-200 transition-colors"
                   >
                     Cancel
@@ -512,7 +545,7 @@ export default function VendorPortalView({ currentUser, onRefreshRentals, onAddR
                     disabled={isModalBusy}
                     className="w-2/3 py-3.5 bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                   >
-                    <span>Publish Vehicle Listing</span>
+                    <span>{editingId ? 'Update Vehicle' : 'Publish Vehicle Listing'}</span>
                   </button>
                 </div>
               </form>
