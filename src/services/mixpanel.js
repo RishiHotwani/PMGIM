@@ -1,7 +1,7 @@
 import mixpanel from 'mixpanel-browser';
 
-const TOKEN = import.meta.env.VITE_MIXPANEL_TOKEN || 'demo-token-placeholder';
-const ENABLED = Boolean(import.meta.env.VITE_MIXPANEL_TOKEN);
+const TOKEN = import.meta.env.VITE_MIXPANEL_TOKEN || 'd6f2fdf146f78bd82934b185fe2f1cb1';
+const ENABLED = Boolean(TOKEN) && TOKEN !== 'demo-token-placeholder';
 
 if (ENABLED) {
   mixpanel.init(TOKEN, {
@@ -9,6 +9,7 @@ if (ENABLED) {
     track_pageview: true,
     persistence: 'localStorage',
     autocapture: true,
+    record_sessions_percent: 100,
   });
 } else {
   console.info('[Mixpanel] VITE_MIXPANEL_TOKEN not set — running in console-log mock mode. Set it in .env to enable dashboard impressions.');
